@@ -1,4 +1,5 @@
 import { comparisonYears, reconcileWorksheet, type Worksheet } from './worksheet'
+import type { Form1219Disclosures, Form1219Entry } from './form1219'
 
 export type Section = 'property' | 'bank' | 'investments' | 'business' | 'movables' | 'liability'
 export type DocStatus = 'missing' | 'uploaded' | 'extracted' | 'reviewed'
@@ -10,7 +11,7 @@ export interface PersonalDetails { clientId: string; birthDate: string; maritalS
 export interface ChildDetails { id: string; name: string; identityNumber: string; birthDate: string }
 export interface AnnexItem { id: string; label: string; selected: boolean; included: boolean }
 export interface SignaturePackage { acknowledgementFileName: string; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
-export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; filingDate: string; workSeconds: number; personal: PersonalDetails; children: ChildDetails[]; officeNotes: string; annexes: AnnexItem[]; signature: SignaturePackage; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
+export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; filingDate: string; workSeconds: number; personal: PersonalDetails; children: ChildDetails[]; officeNotes: string; annexes: AnnexItem[]; signature: SignaturePackage; form1219Entries: Form1219Entry[]; form1219SharePercent: number; form1219Disclosures: Form1219Disclosures; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
 export const sections: Record<Section, string> = { property: 'נדל״ן', bank: 'בנקים ומזומנים', investments: 'חסכונות והשקעות', business: 'נכסים בעסק', movables: 'רכב ותכולה', liability: 'התחייבויות' }
 export const statusLabels: Record<DocStatus, string> = { missing: 'חסר', uploaded: 'ממתין לקריאה', extracted: 'ממתין לבדיקה', reviewed: 'נבדק ואושר' }
 export const currency = (n: number) => new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n)
@@ -53,6 +54,14 @@ export function findings(state: CapitalState) {
   if (state.filingDate && state.filingDate < state.currentDate) result.push({ title: 'תאריך הגשה מוקדם מתאריך ההצהרה', detail: 'יש לבדוק את תאריך ההצהרה ואת תאריך ההגשה לפני סגירת התיק.', level: 'high' })
   if (!state.personal.clientId || !state.personal.birthDate) result.push({ title: 'פרטים אישיים חסרים', detail: 'יש להשלים מספר זהות ותאריך לידה לפני הכנת חבילת החתימה.', level: 'high' })
   if (state.children.some(child => !child.name || !child.identityNumber || !child.birthDate)) result.push({ title: 'פרטי ילדים אינם מלאים', detail: 'יש להשלים שם, מספר זהות ותאריך לידה לכל ילד המופיע בתיק.', level: 'high' })
+  const incomplete1219 = state.form1219Entries.filter(entry => !entry.description.trim() || entry.amount === 0)
+  if (incomplete1219.length) result.push({ title: 'פריטים לא שלמים בטופס 1219', detail: `${incomplete1219.length} פריטים חסרים תיאור או סכום ויש להשלים אותם לפני הפקת הטופס.`, level: 'high' })
+  const foreignWithoutSource = state.form1219Entries.filter(entry => entry.currency !== 'ILS' && entry.foreignAmount === 0)
+  if (foreignWithoutSource.length) result.push({ title: 'סכומי מטבע מקור חסרים', detail: `${foreignWithoutSource.length} פריטים במטבע זר חסרים סכום מקור; יש לתעד גם שער ותאריך המרה בנספח.`, level: 'high' })
+  const unsupported1219 = state.form1219Entries.filter(entry => entry.amount !== 0 && !entry.documentId)
+  if (unsupported1219.length) result.push({ title: 'אסמכתאות חסרות לסעיפי 1219', detail: `${unsupported1219.length} פריטים בעלי סכום עדיין אינם מקושרים למסמך תומך.`, level: 'medium' })
+  const disclosureDetailsMissing = (state.form1219Disclosures.safeDepositBoxes && !state.form1219Disclosures.safeDepositDetails.trim()) || (state.form1219Disclosures.powersOfAttorney && !state.form1219Disclosures.powersOfAttorneyDetails.trim()) || (state.form1219Disclosures.propertyForOthers && !state.form1219Disclosures.propertyForOthersDetails.trim())
+  if (disclosureDetailsMissing) result.push({ title: 'נדרש פירוט בחלק ד׳', detail: 'סומנה תשובה חיובית בכספת, ייפוי כוח או רכוש עבור אחרים ללא פירוט מלא.', level: 'high' })
   const missingAnnexes = state.annexes.filter(item => item.selected && !item.included)
   if (missingAnnexes.length) result.push({ title: 'נספחים שסומנו ועדיין חסרים', detail: `${missingAnnexes.length} נספחים נבחרו לחבילת החתימה אך טרם סומנו כמוכנים.`, level: 'high' })
   result.push({ title: 'בסיס מדידה ואימות טופס', detail: 'הסכומים בדגם על בסיס עלות מדווחת; אין החלפה אוטומטית בשווי שוק. יש לאמת את מיפוי סעיפי טופס 1219 ואת כללי הדיווח לפני הגשה.', level: 'info' })
@@ -87,6 +96,18 @@ export function seedState(): CapitalState {
       { id: 'annex-previous', label: 'הצהרת ההון הקודמת והנספחים הרלוונטיים', selected: true, included: true },
     ],
     signature: { acknowledgementFileName: 'file4_3203.pdf', state: 'draft' },
+    form1219SharePercent: 100,
+    form1219Disclosures: { safeDepositBoxes: false, safeDepositDetails: '', powersOfAttorney: false, powersOfAttorneyDetails: '', propertyForOthers: false, propertyForOthersDetails: '', previousDeclarationFiled: true, previousDeclarationDate: '2020-12-31' },
+    form1219Entries: [
+      { id: '1219-home', code: 10, description: 'דירת מגורים · תל אביב', owner: 'joint', amount: 1850000, acquiredAt: '2016-06-15', currency: 'ILS', foreignAmount: 0, documentId: 'deed' },
+      { id: '1219-bank', code: 30, description: 'חשבון עו״ש · בנק לדוגמה', owner: 'taxpayer', amount: 165000, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: 'bankdoc' },
+      { id: '1219-securities', code: 70, description: 'תיק השקעות וחסכונות', owner: 'spouse', amount: 325000, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: 'investmentdoc' },
+      { id: '1219-car', code: 90, description: 'רכב משפחתי', owner: 'joint', amount: 100000, acquiredAt: '2023-02-01', currency: 'ILS', foreignAmount: 0, documentId: 'car-doc' },
+      { id: '1219-home-content', code: 110, description: 'תכולת בית', owner: 'joint', amount: 55000, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: '' },
+      { id: '1219-mortgage', code: 130, description: 'יתרת קרן משכנתה', owner: 'joint', amount: 690000, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: 'mortgagedoc' },
+      { id: '1219-loan', code: 130, description: 'הלוואה בנקאית', owner: 'taxpayer', amount: 35000, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: 'loandoc' },
+      { id: '1219-business', code: 300, description: 'הון בעסק · סטודיו לוי', owner: 'taxpayer', amount: 210000, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: 'books' },
+    ],
     lines: [
       { id: 'home', section: 'property', label: 'דירת מגורים · תל אביב', owner: 'בני הזוג', previous: 1850000, current: 1850000, docId: 'deed', note: 'עלות רכישה מדווחת; לא שווי שוק' },
       { id: 'bank', section: 'bank', label: 'חשבון עו״ש · בנק לדוגמה', owner: 'דניאל לוי', previous: 85000, current: 165000, docId: 'bankdoc', note: 'יתרה ליום ההצהרה' },
@@ -119,7 +140,7 @@ export function loadState(): CapitalState {
     const s = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
     if (s?.version === 1 && Array.isArray(s.lines) && Array.isArray(s.docs) && Array.isArray(s.flows)) {
       const defaults = seedState()
-      return { ...defaults, ...s, filingDate: s.filingDate ?? defaults.filingDate, workSeconds: Number.isFinite(s.workSeconds) ? s.workSeconds : defaults.workSeconds, personal: { ...defaults.personal, ...s.personal }, children: Array.isArray(s.children) ? s.children : defaults.children, annexes: Array.isArray(s.annexes) ? s.annexes : defaults.annexes, signature: { ...defaults.signature, ...s.signature }, officeNotes: s.officeNotes ?? defaults.officeNotes }
+      return { ...defaults, ...s, filingDate: s.filingDate ?? defaults.filingDate, workSeconds: Number.isFinite(s.workSeconds) ? s.workSeconds : defaults.workSeconds, personal: { ...defaults.personal, ...s.personal }, children: Array.isArray(s.children) ? s.children : defaults.children, annexes: Array.isArray(s.annexes) ? s.annexes : defaults.annexes, signature: { ...defaults.signature, ...s.signature }, form1219Entries: Array.isArray(s.form1219Entries) ? s.form1219Entries : defaults.form1219Entries, form1219SharePercent: Number.isFinite(s.form1219SharePercent) ? s.form1219SharePercent : defaults.form1219SharePercent, form1219Disclosures: { ...defaults.form1219Disclosures, ...s.form1219Disclosures }, officeNotes: s.officeNotes ?? defaults.officeNotes }
     }
   } catch { /* fall back to demo */ }
   return seedState()

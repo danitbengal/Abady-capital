@@ -50,6 +50,28 @@ export const form1219Lines = [
 ] as const
 
 export type Form1219Input = Partial<Record<number, number>>
+export type Form1219Owner = 'taxpayer' | 'spouse' | 'joint' | 'child'
+export interface Form1219Entry {
+  id: string
+  code: number
+  description: string
+  owner: Form1219Owner
+  amount: number
+  acquiredAt: string
+  currency: string
+  foreignAmount: number
+  documentId: string
+}
+export interface Form1219Disclosures {
+  safeDepositBoxes: boolean
+  safeDepositDetails: string
+  powersOfAttorney: boolean
+  powersOfAttorneyDetails: string
+  propertyForOthers: boolean
+  propertyForOthersDetails: string
+  previousDeclarationFiled: boolean
+  previousDeclarationDate: string
+}
 export type Form1219Totals = Record<200 | 210 | 220 | 340 | 390 | 440 | 460 | 540 | 670 | 700 | 730 | 740 | 750 | 770 | 800, number>
 
 const sum = (values: Form1219Input, codes: readonly number[]) => codes.reduce((total, code) => total + (values[code] ?? 0), 0)
@@ -86,4 +108,11 @@ export function calculateForm1219(values: Form1219Input, sharePercent = 100): Fo
     770: total770,
     800: total200 - total210 + total460 + total770,
   }
+}
+
+export function valuesFromEntries(entries: Form1219Entry[]): Form1219Input {
+  return entries.reduce<Form1219Input>((values, entry) => {
+    values[entry.code] = (values[entry.code] ?? 0) + entry.amount
+    return values
+  }, {})
 }

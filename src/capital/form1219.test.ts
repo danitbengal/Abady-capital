@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateForm1219, form1219Lines } from './form1219'
+import { calculateForm1219, form1219Lines, valuesFromEntries, type Form1219Entry } from './form1219'
 
 describe('official Form 1219 calculation map', () => {
   it('contains every editable amount code needed by totals 200 through 800', () => {
@@ -45,5 +45,10 @@ describe('official Form 1219 calculation map', () => {
     expect(totals[750]).toBe(535)
     expect(totals[770]).toBe(560)
     expect(totals[800]).toBe(1460)
+  })
+
+  it('combines separate items that belong to the same official code', () => {
+    const entry = (id: string, code: number, amount: number): Form1219Entry => ({ id, code, amount, description: id, owner: 'taxpayer', acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: '' })
+    expect(valuesFromEntries([entry('account-1', 30, 120), entry('account-2', 30, 80), entry('car', 90, 50)])).toEqual({ 30: 200, 90: 50 })
   })
 })
