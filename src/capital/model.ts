@@ -5,7 +5,7 @@ export type Section = 'property' | 'bank' | 'investments' | 'business' | 'movabl
 export type DocStatus = 'missing' | 'uploaded' | 'extracted' | 'reviewed'
 export interface CapitalLine { id: string; section: Section; label: string; owner: string; previous: number; current: number; docId: string; note: string }
 export type RoutingState = 'unassigned' | 'suggested' | 'confirmed'
-export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; form1219EntryId?: string; worksheetRowId?: string; routingState?: RoutingState; routingNote?: string; sample: boolean }
+export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; form1219EntryId?: string; worksheetRowId?: string; routingState?: RoutingState; routingNote?: string; officeNote?: string; sample: boolean }
 export interface FlowLine { id: string; label: string; kind: 'source' | 'use'; amount: number; verified: boolean; note: string }
 export interface Draft { subject: string; body: string; channel: 'email' | 'whatsapp'; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
 export interface PersonalDetails { clientId: string; birthDate: string; maritalStatus: 'married' | 'single' | 'divorced' | 'widowed' | 'separated'; phone: string; address: string; spouseName: string; spouseId: string; spouseBirthDate: string }

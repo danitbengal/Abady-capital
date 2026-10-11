@@ -18,10 +18,11 @@ function destinationFromInstruction(instruction: string, destinations: DocumentD
   })
 }
 
-export function DocumentAgentQueue({ state, onDestination, onAmount, onApprove, onApproveAll, onOpen, onNotice }: {
+export function DocumentAgentQueue({ state, onDestination, onAmount, onNote, onApprove, onApproveAll, onOpen, onNotice }: {
   state: CapitalState
   onDestination: (documentId: string, destination: string) => void
   onAmount: (documentId: string, amount: number) => void
+  onNote: (documentId: string, note: string) => void
   onApprove: (documentId: string) => void
   onApproveAll: () => void
   onOpen: (documentId: string) => void
@@ -45,7 +46,7 @@ export function DocumentAgentQueue({ state, onDestination, onAmount, onApprove, 
       const destination = documentDestination(document)
       const confirmed = document.status === 'reviewed' && document.routingState === 'confirmed'
       return <article className={`cp-agent-document ${confirmed ? 'confirmed' : ''}`} key={document.id}>
-        <button className="cp-agent-document-name" onClick={() => onOpen(document.id)}><span className="cp-file-icon">{confirmed ? <FileCheck2 size={18}/> : <FileText size={18}/>}</span><span><strong>{document.fileName ?? document.title}</strong><small>{document.source === 'client' ? 'התקבל מהלקוח' : 'צורף במשרד'} · {confirmed ? 'אושר והועבר' : 'ממתין לאישור'}</small></span></button>
+        <div className="cp-agent-document-info"><button className="cp-agent-document-name" onClick={() => onOpen(document.id)}><span className="cp-file-icon">{confirmed ? <FileCheck2 size={18}/> : <FileText size={18}/>}</span><span><strong>{document.fileName ?? document.title}</strong><small>{document.source === 'client' ? 'התקבל מהלקוח' : 'צורף במשרד'} · {confirmed ? 'אושר והועבר' : 'ממתין לאישור'}</small></span></button><label className="cp-agent-document-note">הערה פנימית למשרד<input aria-label={`הערה פנימית למסמך ${document.fileName ?? document.title}`} value={document.officeNote ?? ''} placeholder="הערה לנייר העבודה בלבד…" onChange={event => onNote(document.id, event.target.value)}/><small>נשארת במשרד ואינה מועברת לרשות המסים או ללקוח</small></label></div>
         <div className="cp-agent-destination"><label>הצעת הסוכן<select aria-label={`יעד סיווג ${document.fileName ?? document.title}`} value={destination} onChange={event => onDestination(document.id, event.target.value)}><option value="">לא נמצא סיווג — לבדיקה</option><optgroup label="הצהרת הון">{destinations.filter(item => item.group === 'declaration').map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</optgroup><optgroup label="השוואת הון — מקורות ושימושים">{destinations.filter(item => item.group === 'comparison').map(item => <option value={item.value} key={item.value}>{item.label}</option>)}</optgroup></select></label><div className="cp-agent-instruction"><input aria-label={`הוראת שינוי ${document.fileName ?? document.title}`} placeholder="למשל: להעביר למתנה מההורים" onKeyDown={event => { if (event.key === 'Enter') applyInstruction(document, event.currentTarget) }}/><button onClick={event => { const input = event.currentTarget.previousElementSibling as HTMLInputElement; applyInstruction(document, input) }}><Sparkles size={13}/>שינוי לפי הוראה</button></div></div>
         <label className="cp-agent-amount">סכום<input type="number" min="0" step="1" aria-label={`סכום מסמך ${document.fileName ?? document.title}`} value={proposedDocumentAmount(state, document)} onChange={event => onAmount(document.id, amount(event.target.value))}/><small>₪ · ניתן לתיקון לפני אישור</small></label>
         <div className="cp-agent-approve">{confirmed ? <span className="cp-agent-approved"><CheckCheck size={16}/>אושר</span> : <button className="cp-btn cp-btn-white" disabled={!destination} onClick={() => onApprove(document.id)}><CheckCheck size={15}/>אישור והעברה</button>}</div>
