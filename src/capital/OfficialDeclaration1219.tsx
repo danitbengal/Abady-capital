@@ -41,7 +41,7 @@ export function OfficialDeclaration1219({ state, onChange, onOpenDocument }: Pro
     onChange(s => ({
       ...s,
       form1219Entries: [...s.form1219Entries, { id: entryId, code, description: label, note: '', owner: 'taxpayer', amount: 0, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId }],
-      docs: [...s.docs, { id: documentId, title: `אסמכתה לסעיף ${code} — ${label}`, category: `טופס 1219 · קוד ${code}`, status: 'missing', source: 'client', sample: false }],
+      docs: [...s.docs, { id: documentId, title: `אסמכתה לסעיף ${code} — ${label}`, category: `טופס 1219 · קוד ${code}`, status: 'missing', source: 'client', form1219EntryId: entryId, routingState: 'confirmed', sample: false }],
     }), `נוסף פריט ודרישת מסמך לסעיף ${code}`)
   }
   const deleteEntry = (id: string) => onChange(s => ({ ...s, form1219Entries: s.form1219Entries.filter(entry => entry.id !== id) }), 'פריט הוסר מטיוטת טופס 1219')
@@ -59,13 +59,13 @@ export function OfficialDeclaration1219({ state, onChange, onOpenDocument }: Pro
           <summary><span className="cp-code-number">{line.code}</span><strong>{line.label}</strong><span>{currency(lineTotal)}</span></summary>
           <div className="cp-code-content">
             {entries.length === 0 ? <p className="cp-code-empty">לא הוזנו פריטים בסעיף זה.</p> : <div className="cp-simple-entries">{entries.map(entry => {
-              const linkedDocument = state.docs.find(document => document.id === entry.documentId)
+              const linkedDocuments = state.docs.filter(document => document.form1219EntryId ? document.form1219EntryId === entry.id : document.id === entry.documentId)
               return <div className="cp-simple-entry" key={entry.id}>
                 <div className="cp-entry-main">
                   <label><span>תיאור</span><input aria-label={`תיאור סעיף ${line.code}`} value={entry.description} onChange={e=>updateEntry(entry.id,{description:e.target.value})}/></label>
                   <label className="cp-entry-amount"><span>סכום ₪</span><input className="cp-money" aria-label={`סכום סעיף ${line.code}`} type="number" step="1" value={entry.amount} onChange={e=>updateEntry(entry.id,{amount:Number(e.target.value)||0})}/></label>
                   <label><span>הערה ליד הסכום</span><input aria-label={`הערה לסכום בסעיף ${line.code}`} value={entry.note ?? ''} placeholder="למשל: יתרה לפי אישור הבנק" onChange={e=>updateEntry(entry.id,{note:e.target.value})}/></label>
-                  <label className="cp-entry-document"><span>מסמך רלוונטי</span><div><select aria-label={`מסמך רלוונטי לסכום בסעיף ${line.code}`} value={entry.documentId} onChange={e=>updateEntry(entry.id,{documentId:e.target.value})}><option value="">בחירת מסמך מהתיק</option>{state.docs.map(document=><option value={document.id} key={document.id}>{document.title} · {document.status === 'missing' ? 'חסר' : document.status === 'reviewed' ? 'מאושר' : 'התקבל'}</option>)}</select><button className="cp-text-btn" disabled={!entry.documentId} onClick={()=>entry.documentId&&onOpenDocument(entry.documentId)}>{linkedDocument?.status === 'reviewed' ? <Check size={14}/> : <FileText size={14}/>} {linkedDocument?.status === 'missing' ? 'צירוף' : 'פתיחה'}</button></div></label>
+                  <div className="cp-entry-document"><span>מסמכים מצורפים לשורה</span><div className="cp-linked-documents">{linkedDocuments.length ? linkedDocuments.map(document=><button key={document.id} className="cp-linked-document" onClick={()=>onOpenDocument(document.id)}>{document.status==='reviewed'?<Check size={14}/>:<FileText size={14}/>}<span><strong>{document.fileName ?? document.title}</strong><small>{document.status==='missing'?'ממתין לקבלה':document.routingState==='suggested'?'הסוכן הציע · לבדיקה':'משויך לשורה'}</small></span></button>) : <span className="cp-missing-doc">אין מסמך משויך</span>}</div></div>
                   <button className="cp-icon-button" aria-label={`מחיקת פריט מסעיף ${line.code}`} onClick={()=>deleteEntry(entry.id)}><Trash2 size={15}/></button>
                 </div>
                 <details className="cp-entry-more"><summary>פרטים נוספים לטופס</summary><div>

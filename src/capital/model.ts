@@ -4,7 +4,8 @@ import type { Form1219Disclosures, Form1219Entry } from './form1219'
 export type Section = 'property' | 'bank' | 'investments' | 'business' | 'movables' | 'liability'
 export type DocStatus = 'missing' | 'uploaded' | 'extracted' | 'reviewed'
 export interface CapitalLine { id: string; section: Section; label: string; owner: string; previous: number; current: number; docId: string; note: string }
-export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; sample: boolean }
+export type RoutingState = 'unassigned' | 'suggested' | 'confirmed'
+export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; form1219EntryId?: string; routingState?: RoutingState; routingNote?: string; sample: boolean }
 export interface FlowLine { id: string; label: string; kind: 'source' | 'use'; amount: number; verified: boolean; note: string }
 export interface Draft { subject: string; body: string; channel: 'email' | 'whatsapp'; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
 export interface PersonalDetails { clientId: string; birthDate: string; maritalStatus: 'married' | 'single' | 'divorced' | 'widowed' | 'separated'; phone: string; address: string; spouseName: string; spouseId: string; spouseBirthDate: string }
@@ -48,6 +49,8 @@ export function findings(state: CapitalState) {
   if (c.gap < 0) result.push({ title: 'עודף מקורות מול השימושים', detail: `${currency(-c.gap)}: יש לבדוק נכסים או שימושים שלא נכללו.`, level: 'medium' })
   state.docs.filter(d => d.status === 'missing').forEach(d => result.push({ title: d.title, detail: 'לא התקבל מסמך תומך. יש להשלים מול הלקוח לפני סגירת התיק.', level: 'high' }))
   state.docs.filter(d => d.status === 'extracted').forEach(d => result.push({ title: `בדיקת חילוץ: ${d.title}`, detail: 'הסכום המוצע טרם אושר בידי המשרד. חילוץ הדגם הוא סימולציה.', level: 'medium' }))
+  state.docs.filter(d => d.status !== 'missing' && (!d.form1219EntryId || d.routingState === 'unassigned')).forEach(d => result.push({ title: `שיוך מסמך: ${d.fileName ?? d.title}`, detail: 'המסמך התקבל אך עדיין לא שויך לשורה בהצהרת ההון.', level: 'high' }))
+  state.docs.filter(d => d.status !== 'missing' && d.routingState === 'suggested').forEach(d => result.push({ title: `בדיקת מיקום: ${d.fileName ?? d.title}`, detail: 'הסוכן הציע שורה לפי שם המסמך. יש לאשר את המיקום או להעביר לשורה אחרת.', level: 'medium' }))
   const checkedRows = state.worksheet?.rows ?? state.flows
   checkedRows.filter(f => !f.verified).forEach(f => result.push({ title: `אסמכתה: ${f.label}`, detail: 'סכום נכלל בהשוואה כנתון זמני ללא אסמכתה מאושרת.', level: 'medium' }))
   if (state.currentDate <= state.previousDate) result.push({ title: 'סדר תאריכים שגוי', detail: 'תאריך ההצהרה הנוכחית חייב להיות מאוחר מקודמתה.', level: 'high' })
@@ -58,7 +61,7 @@ export function findings(state: CapitalState) {
   if (incomplete1219.length) result.push({ title: 'פריטים לא שלמים בטופס 1219', detail: `${incomplete1219.length} פריטים חסרים תיאור או סכום ויש להשלים אותם לפני הפקת הטופס.`, level: 'high' })
   const foreignWithoutSource = state.form1219Entries.filter(entry => entry.currency !== 'ILS' && entry.foreignAmount === 0)
   if (foreignWithoutSource.length) result.push({ title: 'סכומי מטבע מקור חסרים', detail: `${foreignWithoutSource.length} פריטים במטבע זר חסרים סכום מקור; יש לתעד גם שער ותאריך המרה בנספח.`, level: 'high' })
-  const unsupported1219 = state.form1219Entries.filter(entry => entry.amount !== 0 && !entry.documentId)
+  const unsupported1219 = state.form1219Entries.filter(entry => entry.amount !== 0 && !state.docs.some(document => document.form1219EntryId ? document.form1219EntryId === entry.id : document.id === entry.documentId))
   if (unsupported1219.length) result.push({ title: 'אסמכתאות חסרות לסעיפי 1219', detail: `${unsupported1219.length} פריטים בעלי סכום עדיין אינם מקושרים למסמך תומך.`, level: 'medium' })
   const disclosureDetailsMissing = (state.form1219Disclosures.safeDepositBoxes && !state.form1219Disclosures.safeDepositDetails.trim()) || (state.form1219Disclosures.powersOfAttorney && !state.form1219Disclosures.powersOfAttorneyDetails.trim()) || (state.form1219Disclosures.propertyForOthers && !state.form1219Disclosures.propertyForOthersDetails.trim())
   if (disclosureDetailsMissing) result.push({ title: 'נדרש פירוט בחלק ד׳', detail: 'סומנה תשובה חיובית בכספת, ייפוי כוח או רכוש עבור אחרים ללא פירוט מלא.', level: 'high' })
@@ -118,14 +121,14 @@ export function seedState(): CapitalState {
       { id: 'loan', section: 'liability', label: 'הלוואה בנקאית', owner: 'דניאל לוי', previous: 60000, current: 35000, docId: 'loandoc', note: 'יתרה, ללא כפל הוצאות או שימושים' },
     ],
     docs: [
-      { id: 'deed', title: 'חוזה רכישת דירת מגורים', category: 'נדל״ן', status: 'reviewed', source: 'office', fileName: 'חוזה_רכישה_דוגמה.pdf', sample: true },
-      { id: 'bankdoc', title: 'אישור יתרות בנק ליום ההצהרה', category: 'בנקים', status: 'uploaded', source: 'client', fileName: 'אישור_בנק_דוגמה.pdf', extracted: 165000, targetId: 'bank', confidence: 97, sample: true },
-      { id: 'investmentdoc', title: 'אישור עלות ניירות ערך וחסכונות', category: 'השקעות', status: 'missing', source: 'client', sample: true },
-      { id: 'books', title: 'מאזן בוחן וכרטסת הון בעלים', category: 'ספרי העסק', status: 'uploaded', source: 'office', fileName: 'מאזן_בוחן_דוגמה.xlsx', extracted: 210000, targetId: 'business', confidence: 86, sample: true },
-      { id: 'car-doc', title: 'מסמכי רכישה ומכירה של הרכב', category: 'רכב', status: 'missing', source: 'client', sample: true },
-      { id: 'mortgagedoc', title: 'אישור יתרת קרן משכנתה', category: 'התחייבויות', status: 'reviewed', source: 'client', fileName: 'משכנתה_דוגמה.pdf', sample: true },
-      { id: 'loandoc', title: 'אישור יתרת הלוואה', category: 'התחייבויות', status: 'missing', source: 'client', sample: true },
-      { id: 'gift', title: 'אסמכתה למתנה מההורים', category: 'מקורות הון', status: 'missing', source: 'client', sample: true },
+      { id: 'deed', title: 'חוזה רכישת דירת מגורים', category: 'נדל״ן', status: 'reviewed', source: 'office', fileName: 'חוזה_רכישה_דוגמה.pdf', form1219EntryId: '1219-home', routingState: 'confirmed', sample: true },
+      { id: 'bankdoc', title: 'אישור יתרות בנק ליום ההצהרה', category: 'בנקים', status: 'uploaded', source: 'client', fileName: 'אישור_בנק_דוגמה.pdf', extracted: 165000, targetId: 'bank', confidence: 97, form1219EntryId: '1219-bank', routingState: 'suggested', sample: true },
+      { id: 'investmentdoc', title: 'אישור עלות ניירות ערך וחסכונות', category: 'השקעות', status: 'missing', source: 'client', form1219EntryId: '1219-securities', routingState: 'confirmed', sample: true },
+      { id: 'books', title: 'מאזן בוחן וכרטסת הון בעלים', category: 'ספרי העסק', status: 'uploaded', source: 'office', fileName: 'מאזן_בוחן_דוגמה.xlsx', extracted: 210000, targetId: 'business', confidence: 86, form1219EntryId: '1219-business', routingState: 'confirmed', sample: true },
+      { id: 'car-doc', title: 'מסמכי רכישה ומכירה של הרכב', category: 'רכב', status: 'missing', source: 'client', form1219EntryId: '1219-car', routingState: 'confirmed', sample: true },
+      { id: 'mortgagedoc', title: 'אישור יתרת קרן משכנתה', category: 'התחייבויות', status: 'reviewed', source: 'client', fileName: 'משכנתה_דוגמה.pdf', form1219EntryId: '1219-mortgage', routingState: 'confirmed', sample: true },
+      { id: 'loandoc', title: 'אישור יתרת הלוואה', category: 'התחייבויות', status: 'missing', source: 'client', form1219EntryId: '1219-loan', routingState: 'confirmed', sample: true },
+      { id: 'gift', title: 'אסמכתה למתנה מההורים', category: 'מקורות הון', status: 'missing', source: 'client', routingState: 'unassigned', sample: true },
     ],
     flows: [
       { id: 'income', label: 'הכנסות נטו מדווחות בתקופה', kind: 'source', amount: 1650000, verified: true, note: 'דוגמה: לאחר מסים; למנוע ניכוי כפול של המס' },
@@ -140,7 +143,14 @@ export function loadState(): CapitalState {
     const s = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
     if (s?.version === 1 && Array.isArray(s.lines) && Array.isArray(s.docs) && Array.isArray(s.flows)) {
       const defaults = seedState()
-      return { ...defaults, ...s, filingDate: s.filingDate ?? defaults.filingDate, workSeconds: Number.isFinite(s.workSeconds) ? s.workSeconds : defaults.workSeconds, personal: { ...defaults.personal, ...s.personal }, children: Array.isArray(s.children) ? s.children : defaults.children, annexes: Array.isArray(s.annexes) ? s.annexes : defaults.annexes, signature: { ...defaults.signature, ...s.signature }, form1219Entries: Array.isArray(s.form1219Entries) ? s.form1219Entries : defaults.form1219Entries, form1219SharePercent: Number.isFinite(s.form1219SharePercent) ? s.form1219SharePercent : defaults.form1219SharePercent, form1219Disclosures: { ...defaults.form1219Disclosures, ...s.form1219Disclosures }, officeNotes: s.officeNotes ?? defaults.officeNotes }
+      const form1219Entries: Form1219Entry[] = Array.isArray(s.form1219Entries) ? s.form1219Entries : defaults.form1219Entries
+      const storedDocs: CapitalDocument[] = Array.isArray(s.docs) ? s.docs : defaults.docs
+      const docs = storedDocs.map(document => {
+        if (document.form1219EntryId) return document
+        const linkedEntry = form1219Entries.find(entry => entry.documentId === document.id)
+        return linkedEntry ? { ...document, form1219EntryId: linkedEntry.id, routingState: document.status === 'missing' ? 'confirmed' as const : 'suggested' as const } : document
+      })
+      return { ...defaults, ...s, docs, filingDate: s.filingDate ?? defaults.filingDate, workSeconds: Number.isFinite(s.workSeconds) ? s.workSeconds : defaults.workSeconds, personal: { ...defaults.personal, ...s.personal }, children: Array.isArray(s.children) ? s.children : defaults.children, annexes: Array.isArray(s.annexes) ? s.annexes : defaults.annexes, signature: { ...defaults.signature, ...s.signature }, form1219Entries, form1219SharePercent: Number.isFinite(s.form1219SharePercent) ? s.form1219SharePercent : defaults.form1219SharePercent, form1219Disclosures: { ...defaults.form1219Disclosures, ...s.form1219Disclosures }, officeNotes: s.officeNotes ?? defaults.officeNotes }
     }
   } catch { /* fall back to demo */ }
   return seedState()

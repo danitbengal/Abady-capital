@@ -6,9 +6,11 @@ import { OfficeDashboard } from './OfficeDashboard'
 import { OfficialDeclaration1219 } from './OfficialDeclaration1219'
 import { worksheetText } from './worksheet'
 import { canAccessClient, type OfficeUser } from './access'
+import { inferForm1219Entry } from './documentRouting'
 import './capital.css'
 import './client-access.css'
 import './client-select.css'
+import './document-routing.css'
 
 type Tab = 'clients' | 'clientSelect' | 'personal' | 'overview' | 'documents' | 'declaration' | 'comparison' | 'agent' | 'signature' | 'portal'
 const nav: { id: Tab; label: string; icon: ReactNode; sub: string }[] = [
@@ -105,12 +107,17 @@ export function CapitalPrototype() {
       const docs = [...s.docs]
       allowed.forEach((f, i) => {
         const target = i === 0 && uploadTarget ? docs.findIndex(d => d.id === uploadTarget) : -1
-        if (target >= 0) docs[target] = { ...docs[target], fileName: f.name, source: uploadSource, status: 'uploaded', sample: false, confidence: undefined, extracted: undefined }
-        else docs.push({ id: `upload-${Date.now()}-${i}`, title: f.name, fileName: f.name, category: 'לסיווג המשרד', source: uploadSource, status: 'uploaded', sample: false })
+        if (target >= 0) {
+          const expectedEntry = docs[target].form1219EntryId ?? s.form1219Entries.find(entry => entry.documentId === docs[target].id)?.id
+          docs[target] = { ...docs[target], fileName: f.name, source: uploadSource, status: 'uploaded', form1219EntryId: expectedEntry, routingState: uploadSource === 'client' ? 'suggested' : 'confirmed', routingNote: uploadSource === 'client' ? 'המסמך הגיע מדרישה המקושרת לשורה; הסוכן סימן את שם הקובץ והמיקום לבדיקה.' : 'צורף ואושר במשרד.', sample: false, confidence: undefined, extracted: undefined }
+        } else {
+          const suggestedEntry = inferForm1219Entry(f.name, s.form1219Entries)
+          docs.push({ id: `upload-${Date.now()}-${i}`, title: f.name, fileName: f.name, category: suggestedEntry ? `שיוך אוטומטי · קוד ${suggestedEntry.code}` : 'לסיווג המשרד', source: uploadSource, status: 'uploaded', form1219EntryId: suggestedEntry?.id, routingState: suggestedEntry ? 'suggested' : 'unassigned', routingNote: suggestedEntry ? `הסוכן הציע את השורה לפי שם הקובץ: ${f.name}` : 'הסוכן לא זיהה שורת יעד לפי שם הקובץ.', sample: false })
+        }
       })
       return { ...s, docs }
     }, `נרשמו ${allowed.length} קבצים מ${uploadSource === 'client' ? 'פורטל הלקוח' : 'המשרד'} בדגם`)
-    setNotice('נרשמו שמות הקבצים בלבד. תוכן הקבצים לא נשמר ולא נשלח לשרת בדגם.')
+    setNotice('המסמכים נותבו לשורות לפי הדרישה או שם הקובץ. יש לבדוק את השיוך במסך המסמכים; תוכן הקבצים אינו נשמר בדגם.')
     if (fileInput.current) fileInput.current.value = ''
   }
   function receiveSignatureFile(files: FileList | null) {
@@ -133,8 +140,17 @@ export function CapitalPrototype() {
   }
   function approveDoc(target: CapitalDocument) {
     if (target.status === 'missing' || target.status === 'uploaded') return
-    change(s => ({ ...s, docs: s.docs.map(d => d.id === target.id ? { ...d, status: 'reviewed' } : d), lines: s.lines.map(l => l.id === target.targetId && target.extracted !== undefined ? { ...l, current: target.extracted } : l), form1219Entries: s.form1219Entries.map(entry => entry.documentId === target.id && target.extracted !== undefined ? { ...entry, amount: target.extracted } : entry) }), `אושר מסמך ושיוך: ${target.title}`)
+    change(s => ({ ...s, docs: s.docs.map(d => d.id === target.id ? { ...d, status: 'reviewed', routingState: d.form1219EntryId ? 'confirmed' : d.routingState } : d), lines: s.lines.map(l => l.id === target.targetId && target.extracted !== undefined ? { ...l, current: target.extracted } : l), form1219Entries: s.form1219Entries.map(entry => (entry.id === target.form1219EntryId || entry.documentId === target.id) && target.extracted !== undefined ? { ...entry, amount: target.extracted } : entry) }), `אושר מסמך ושיוך: ${target.title}`)
     setNotice('הסכום אושר ושויך לשורת ההצהרה. ההשוואה עודכנה.')
+  }
+  function confirmDocumentRoute(documentId: string) {
+    change(s => ({ ...s, docs: s.docs.map(d => d.id === documentId ? { ...d, routingState: d.form1219EntryId ? 'confirmed' : 'unassigned', routingNote: d.form1219EntryId ? 'המשרד בדק ואישר את שם המסמך ואת מיקומו.' : d.routingNote } : d) }), 'המשרד אישר את מיקום המסמך')
+    setNotice('שם המסמך והמיקום שלו נבדקו ואושרו.')
+  }
+  function moveDocument(documentId: string, entryId: string) {
+    const targetEntry = state.form1219Entries.find(entry => entry.id === entryId)
+    change(s => ({ ...s, docs: s.docs.map(d => d.id === documentId ? { ...d, form1219EntryId: entryId || undefined, targetId: undefined, routingState: entryId ? 'confirmed' : 'unassigned', category: targetEntry ? `טופס 1219 · קוד ${targetEntry.code}` : 'לסיווג המשרד', routingNote: targetEntry ? `המשרד העביר אוטומטית לשורה: קוד ${targetEntry.code} · ${targetEntry.description}` : 'המסמך הוסר מהשורה וממתין לסיווג.' } : d) }), targetEntry ? `המסמך הועבר לשורה ${targetEntry.code} — ${targetEntry.description}` : 'המסמך הוסר מהשורה')
+    setNotice(targetEntry ? `המסמך עבר אוטומטית לקוד ${targetEntry.code} — ${targetEntry.description}.` : 'המסמך ממתין כעת לסיווג מחדש.')
   }
   function exportFile(kind: 'json' | 'report') {
     const report = `דגם בלבד — לא להגשה\nהצהרת הון: ${state.client}\n${state.previousDate} — ${state.currentDate}\nתאריך הגשה: ${state.filingDate}\n\n${state.lines.map(l => `${sections[l.section]} | ${l.label} | קודם: ${l.previous} | נוכחי: ${l.current} | ${l.note}`).join('\n')}\n\nהון קודם: ${c.previousNet}\nהון נוכחי: ${c.currentNet}\nגידול הון: ${c.growth}\nמקורות: ${c.sources}\nשימושים: ${c.uses}\nפער: ${c.gap}\n\nממצאים:\n${issues.map(i => `${i.title}: ${i.detail}`).join('\n')}\n\nהסכומים דורשים בדיקה מקצועית; טופס 1219 הרשמי לא אומת. אין בדגם הגשה לרשות המסים.`
@@ -192,7 +208,7 @@ export function CapitalPrototype() {
         </>}
 
         {tab === 'documents' && <div className="cp-document-grid"><section className="cp-panel"><div className="cp-panel-head"><div><h2>תיק המסמכים</h2><p>קישור בין כל מסמך לסעיף בהצהרה</p></div><Badge>{received} התקבלו</Badge></div><div className="cp-doc-tools"><label className="cp-search"><Search size={16}/><input placeholder="חיפוש מסמך או קטגוריה…" value={search} onChange={e=>setSearch(e.target.value)}/></label><select aria-label="סינון מסמכים" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">כל המצבים</option>{Object.entries(statusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div><div className="cp-doc-list">{state.docs.filter(d=>(filter==='all'||d.status===filter)&&(d.title+d.category).includes(search)).map(d=><button key={d.id} className={`cp-doc-row ${selected===d.id?'selected':''}`} onClick={()=>setSelected(d.id)}><span className="cp-file-icon"><FileText size={20}/></span><div><strong>{d.title}</strong><small>{d.category} · {d.source==='client'?'מהלקוח':'מהמשרד'}{d.sample?' · דוגמה':''}</small></div><Badge tone={d.status==='reviewed'?'mint':d.status==='missing'?'amber':'blue'}>{statusLabels[d.status]}</Badge></button>)}</div><button className="cp-upload-zone" onClick={()=>upload(null,'office')}><Upload/><strong>צירוף מסמכים מהמשרד</strong><small>PDF, תמונות, Excel ו־CSV · עד 20MB לקובץ</small><small>בדגם נשמרים שמות בלבד; אין העלאת תוכן</small></button></section>
-          <section className="cp-panel cp-doc-preview">{doc&&<><div className="cp-panel-head"><div><h2>קריאה ובקרה</h2><p>{doc.title}</p></div><ScanLine size={22}/></div><div className="cp-paper"><div className="cp-paper-top">{doc.sample?'מסמך דוגמה · לא מסמך אמיתי':'פרטי קובץ · ללא תצוגת תוכן'}</div><FileText size={42}/><h3>{doc.fileName??'המסמך עדיין לא התקבל'}</h3><p>{doc.sample?'נתוני הדוגמה מובנים מראש לצורך הדמיית קריאה.':'הדגם אינו שומר או קורא את תוכן הקובץ.'}</p>{doc.status==='extracted'||doc.status==='reviewed'?<div className="cp-extraction"><span>סכום שחולץ · הדמיה</span><strong>{doc.extracted!==undefined?currency(doc.extracted):'אישור משרד לדוגמה'}</strong><small>תאריך הצהרה: {state.currentDate}</small></div>:<div className="cp-paper-lines"><span/><span/><span/></div>}</div>
+          <section className="cp-panel cp-doc-preview">{doc&&<><div className="cp-panel-head"><div><h2>קריאה ובקרה</h2><p>{doc.title}</p></div><ScanLine size={22}/></div><div className="cp-paper"><div className="cp-paper-top">{doc.sample?'מסמך דוגמה · לא מסמך אמיתי':'פרטי קובץ · ללא תצוגת תוכן'}</div><FileText size={42}/><h3>{doc.fileName??'המסמך עדיין לא התקבל'}</h3><p>{doc.sample?'נתוני הדוגמה מובנים מראש לצורך הדמיית קריאה.':'הדגם אינו שומר או קורא את תוכן הקובץ.'}</p>{doc.status==='extracted'||doc.status==='reviewed'?<div className="cp-extraction"><span>סכום שחולץ · הדמיה</span><strong>{doc.extracted!==undefined?currency(doc.extracted):'אישור משרד לדוגמה'}</strong><small>תאריך הצהרה: {state.currentDate}</small></div>:<div className="cp-paper-lines"><span/><span/><span/></div>}</div><div className="cp-routing-box"><div className="cp-routing-head"><strong>בדיקת שם המסמך והמיקום</strong><Badge tone={doc.routingState==='confirmed'?'mint':doc.routingState==='suggested'?'blue':'amber'}>{doc.routingState==='confirmed'?'אושר במשרד':doc.routingState==='suggested'?'הצעת הסוכן':'לא משויך'}</Badge></div><div className="cp-routing-current"><FileText size={15}/><span>{doc.fileName??doc.title}</span></div><div className="cp-routing-controls"><label>לאן להעביר את המסמך?<select aria-label="לאן להעביר את המסמך" value={doc.form1219EntryId??''} onChange={e=>moveDocument(doc.id,e.target.value)}><option value="">ללא שיוך — לבדיקה</option>{state.form1219Entries.map(entry=><option value={entry.id} key={entry.id}>קוד {entry.code} · {entry.description}</option>)}</select></label>{doc.routingState==='suggested'&&doc.form1219EntryId&&<button className="cp-btn cp-btn-white" onClick={()=>confirmDocumentRoute(doc.id)}><CheckCheck size={15}/>המיקום נכון</button>}</div><p className="cp-routing-note">{doc.routingNote??'יש לבדוק את שם הקובץ ואת השורה שאליה שויך. בחירת שורה אחרת מעבירה את המסמך אוטומטית.'}</p></div>
           {doc.status==='missing'?<button className="cp-btn cp-btn-primary cp-full" onClick={()=>upload(doc.id,'office')}><Upload size={17}/>צירוף למסמך החסר</button>:doc.status==='uploaded'?<button className="cp-btn cp-btn-primary cp-full" disabled={!doc.sample||doc.extracted===undefined} onClick={()=>extract(doc)}><ScanLine size={17}/>הדמיית OCR וקריאת ספרים</button>:doc.status==='extracted'?<><div className="cp-info">רמת ביטחון לדוגמה: {doc.confidence}% · יש לבדוק את הסכום, הבעלות, מועד היתרה ובסיס המדידה לפני אישור.</div><label className="cp-label">סכום לאישור<MoneyInput value={doc.extracted??0} label="תיקון סכום שחולץ" onChange={n=>change(s=>({...s,docs:s.docs.map(d=>d.id===doc.id?{...d,extracted:n}:d)}))}/></label><button className="cp-btn cp-btn-primary cp-full" onClick={()=>approveDoc(doc)}><CheckCheck size={17}/>אישור ושיוך להצהרה</button></>:<div className="cp-success"><ShieldCheck size={18}/>מסמך מאושר בדגם</div>}
           <p className="cp-footnote">בדגם אין OCR אמיתי. החילוץ זמין רק לאישור הבנק ולמאזן הבוחן לדוגמה; תוצאה טעונה אישור ולא מחליפה ביקורת.</p></>}</section></div>}
 
