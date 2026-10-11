@@ -2,6 +2,7 @@ import { Check, FileText, Landmark, Plus, Trash2, Wallet } from 'lucide-react'
 import { calculateForm1219, form1219Lines, valuesFromEntries, type Form1219Entry, type Form1219Owner } from './form1219'
 import { currency, type CapitalState } from './model'
 import './official1219.css'
+import './simple-entries.css'
 
 const parts = [
   { id: 'A', title: 'חלק א׳ — רכוש והתחייבויות פרטיים', note: 'נכסי התא המשפחתי בארץ ובחו״ל, לפי העלות בפועל.' },
@@ -33,7 +34,16 @@ export function OfficialDeclaration1219({ state, onChange, onOpenDocument }: Pro
   const values = valuesFromEntries(state.form1219Entries)
   const totals = calculateForm1219(values, state.form1219SharePercent)
   const updateEntry = (id: string, patch: Partial<Form1219Entry>) => onChange(s => ({ ...s, form1219Entries: s.form1219Entries.map(entry => entry.id === id ? { ...entry, ...patch } : entry), signature: { ...s.signature, state: 'draft', approvedAt: undefined } }))
-  const addEntry = (code: number, label: string) => onChange(s => ({ ...s, form1219Entries: [...s.form1219Entries, { id: `1219-${code}-${Date.now()}`, code, description: label, owner: 'taxpayer', amount: 0, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: '' }] }), `נוסף פריט לסעיף ${code}`)
+  const addEntry = (code: number, label: string) => {
+    const stamp = Date.now()
+    const entryId = `1219-${code}-${stamp}`
+    const documentId = `1219-doc-${code}-${stamp}`
+    onChange(s => ({
+      ...s,
+      form1219Entries: [...s.form1219Entries, { id: entryId, code, description: label, note: '', owner: 'taxpayer', amount: 0, acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId }],
+      docs: [...s.docs, { id: documentId, title: `אסמכתה לסעיף ${code} — ${label}`, category: `טופס 1219 · קוד ${code}`, status: 'missing', source: 'client', sample: false }],
+    }), `נוסף פריט ודרישת מסמך לסעיף ${code}`)
+  }
   const deleteEntry = (id: string) => onChange(s => ({ ...s, form1219Entries: s.form1219Entries.filter(entry => entry.id !== id) }), 'פריט הוסר מטיוטת טופס 1219')
 
   return <>
@@ -48,15 +58,24 @@ export function OfficialDeclaration1219({ state, onChange, onOpenDocument }: Pro
         return <details className="cp-code-card" key={line.code} open={entries.length > 0}>
           <summary><span className="cp-code-number">{line.code}</span><strong>{line.label}</strong><span>{currency(lineTotal)}</span></summary>
           <div className="cp-code-content">
-            {entries.length === 0 ? <p className="cp-code-empty">לא הוזנו פריטים בסעיף זה.</p> : <div className="cp-table-wrap"><table className="cp-table cp-official-table"><thead><tr><th>תיאור הפריט</th><th>בעלות</th><th>עלות / יתרה ₪</th><th>תאריך רכישה</th><th>מטבע וסכום מקור</th><th>אסמכתה</th><th></th></tr></thead><tbody>{entries.map(entry => <tr key={entry.id}>
-              <td><input aria-label={`תיאור סעיף ${line.code}`} value={entry.description} onChange={e=>updateEntry(entry.id,{description:e.target.value})}/></td>
-              <td><select aria-label={`בעלות סעיף ${line.code}`} value={entry.owner} onChange={e=>updateEntry(entry.id,{owner:e.target.value as Form1219Owner})}>{owners.map(owner=><option value={owner.value} key={owner.value}>{owner.label}</option>)}</select></td>
-              <td><input className="cp-money" aria-label={`סכום סעיף ${line.code}`} type="number" step="1" value={entry.amount} onChange={e=>updateEntry(entry.id,{amount:Number(e.target.value)||0})}/></td>
-              <td><input aria-label={`תאריך רכישה סעיף ${line.code}`} type="date" value={entry.acquiredAt} onChange={e=>updateEntry(entry.id,{acquiredAt:e.target.value})}/></td>
-              <td><div className="cp-currency-pair"><select aria-label={`מטבע סעיף ${line.code}`} value={entry.currency} onChange={e=>updateEntry(entry.id,{currency:e.target.value})}><option>ILS</option><option>USD</option><option>EUR</option><option>GBP</option><option>אחר</option></select><input aria-label={`סכום מטבע מקור סעיף ${line.code}`} type="number" value={entry.foreignAmount} onChange={e=>updateEntry(entry.id,{foreignAmount:Number(e.target.value)||0})}/></div></td>
-              <td>{entry.documentId ? <button className="cp-text-btn" onClick={()=>onOpenDocument(entry.documentId)}><Check size={14}/>פתיחה</button> : <span className="cp-missing-doc">חסר</span>}</td>
-              <td><button className="cp-icon-button" aria-label={`מחיקת פריט מסעיף ${line.code}`} onClick={()=>deleteEntry(entry.id)}><Trash2 size={15}/></button></td>
-            </tr>)}</tbody></table></div>}
+            {entries.length === 0 ? <p className="cp-code-empty">לא הוזנו פריטים בסעיף זה.</p> : <div className="cp-simple-entries">{entries.map(entry => {
+              const linkedDocument = state.docs.find(document => document.id === entry.documentId)
+              return <div className="cp-simple-entry" key={entry.id}>
+                <div className="cp-entry-main">
+                  <label><span>תיאור</span><input aria-label={`תיאור סעיף ${line.code}`} value={entry.description} onChange={e=>updateEntry(entry.id,{description:e.target.value})}/></label>
+                  <label className="cp-entry-amount"><span>סכום ₪</span><input className="cp-money" aria-label={`סכום סעיף ${line.code}`} type="number" step="1" value={entry.amount} onChange={e=>updateEntry(entry.id,{amount:Number(e.target.value)||0})}/></label>
+                  <label><span>הערה ליד הסכום</span><input aria-label={`הערה לסכום בסעיף ${line.code}`} value={entry.note ?? ''} placeholder="למשל: יתרה לפי אישור הבנק" onChange={e=>updateEntry(entry.id,{note:e.target.value})}/></label>
+                  <label className="cp-entry-document"><span>מסמך רלוונטי</span><div><select aria-label={`מסמך רלוונטי לסכום בסעיף ${line.code}`} value={entry.documentId} onChange={e=>updateEntry(entry.id,{documentId:e.target.value})}><option value="">בחירת מסמך מהתיק</option>{state.docs.map(document=><option value={document.id} key={document.id}>{document.title} · {document.status === 'missing' ? 'חסר' : document.status === 'reviewed' ? 'מאושר' : 'התקבל'}</option>)}</select><button className="cp-text-btn" disabled={!entry.documentId} onClick={()=>entry.documentId&&onOpenDocument(entry.documentId)}>{linkedDocument?.status === 'reviewed' ? <Check size={14}/> : <FileText size={14}/>} {linkedDocument?.status === 'missing' ? 'צירוף' : 'פתיחה'}</button></div></label>
+                  <button className="cp-icon-button" aria-label={`מחיקת פריט מסעיף ${line.code}`} onClick={()=>deleteEntry(entry.id)}><Trash2 size={15}/></button>
+                </div>
+                <details className="cp-entry-more"><summary>פרטים נוספים לטופס</summary><div>
+                  <label><span>בעלות</span><select aria-label={`בעלות סעיף ${line.code}`} value={entry.owner} onChange={e=>updateEntry(entry.id,{owner:e.target.value as Form1219Owner})}>{owners.map(owner=><option value={owner.value} key={owner.value}>{owner.label}</option>)}</select></label>
+                  <label><span>תאריך רכישה</span><input aria-label={`תאריך רכישה סעיף ${line.code}`} type="date" value={entry.acquiredAt} onChange={e=>updateEntry(entry.id,{acquiredAt:e.target.value})}/></label>
+                  <label><span>מטבע</span><select aria-label={`מטבע סעיף ${line.code}`} value={entry.currency} onChange={e=>updateEntry(entry.id,{currency:e.target.value})}><option>ILS</option><option>USD</option><option>EUR</option><option>GBP</option><option>אחר</option></select></label>
+                  <label><span>סכום במטבע המקור</span><input aria-label={`סכום מטבע מקור סעיף ${line.code}`} type="number" value={entry.foreignAmount} onChange={e=>updateEntry(entry.id,{foreignAmount:Number(e.target.value)||0})}/></label>
+                </div></details>
+              </div>
+            })}</div>}
             <button className="cp-text-btn cp-add-line" onClick={()=>addEntry(line.code,line.label)}><Plus size={15}/>הוספת פריט נפרד לסעיף {line.code}</button>
           </div>
         </details>

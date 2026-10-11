@@ -48,7 +48,7 @@ describe('official Form 1219 calculation map', () => {
   })
 
   it('combines separate items that belong to the same official code', () => {
-    const entry = (id: string, code: number, amount: number): Form1219Entry => ({ id, code, amount, description: id, owner: 'taxpayer', acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: '' })
+    const entry = (id: string, code: number, amount: number): Form1219Entry => ({ id, code, amount, description: id, note: '', owner: 'taxpayer', acquiredAt: '', currency: 'ILS', foreignAmount: 0, documentId: '' })
     expect(valuesFromEntries([entry('account-1', 30, 120), entry('account-2', 30, 80), entry('car', 90, 50)])).toEqual({ 30: 200, 90: 50 })
   })
 })

@@ -55,6 +55,7 @@ export interface Form1219Entry {
   id: string
   code: number
   description: string
+  note: string
   owner: Form1219Owner
   amount: number
   acquiredAt: string
