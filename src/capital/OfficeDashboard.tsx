@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, Clock3, FileText,
 import type { ChangeEvent, ReactNode } from 'react'
 import { useRef, useState } from 'react'
 import type { CapitalState } from './model'
+import { canAccessClient, type OfficeUser } from './access'
 
 type Stage = 'waiting' | 'documents' | 'review' | 'comparison' | 'approval' | 'complete'
 interface PortfolioCase {
@@ -48,19 +49,18 @@ function demoCases(state: CapitalState): PortfolioCase[] {
   ]
 }
 
-export function OfficeDashboard({ state, onOpen, onNotice, onUpdateDates }: { state: CapitalState; onOpen: (target?: 'overview' | 'personal') => void; onNotice: (message: string) => void; onUpdateDates: (declarationDate: string, filingDate: string) => void }) {
+export function OfficeDashboard({ state, currentUser, onOpen, onNotice, onUpdateDates }: { state: CapitalState; currentUser: OfficeUser; onOpen: (target?: 'overview' | 'personal') => void; onNotice: (message: string) => void; onUpdateDates: (declarationDate: string, filingDate: string) => void }) {
   const [importedCases, setImportedCases] = useState<PortfolioCase[]>([])
   const [pdfName, setPdfName] = useState('')
   const importInput = useRef<HTMLInputElement>(null)
-  const cases = [...demoCases(state), ...importedCases]
+  const cases = [...demoCases(state), ...importedCases].filter(portfolioCase => canAccessClient(currentUser, portfolioCase))
   const [query, setQuery] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
-  const [managerFilter, setManagerFilter] = useState('all')
   const taxPreviewRows = [...newTaxCases, { id: 'tax-existing', client: state.client, identifier: 'תיק 10482', declarationDate: '2026-12-31', filingDate: '2027-03-31', duplicate: true }]
-  const visible = cases.filter(c => `${c.client} ${c.identifier} ${c.manager}`.toLowerCase().includes(query.trim().toLowerCase()) && (stageFilter === 'all' || c.stage === stageFilter) && (managerFilter === 'all' || c.manager === managerFilter))
+  const visible = cases.filter(c => `${c.client} ${c.identifier} ${c.manager}`.toLowerCase().includes(query.trim().toLowerCase()) && (stageFilter === 'all' || c.stage === stageFilter))
   const overdue = cases.filter(c => new Date(c.filingDate) < new Date('2026-10-11') && c.stage !== 'complete').length
   const waiting = cases.filter(c => c.stage === 'waiting' || c.daysWaiting >= 7).length
-  const average = Math.round(cases.reduce((a, c) => a + c.progress, 0) / cases.length)
+  const average = cases.length ? Math.round(cases.reduce((a, c) => a + c.progress, 0) / cases.length) : 0
   function receiveTaxList(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -73,7 +73,7 @@ export function OfficeDashboard({ state, onOpen, onNotice, onUpdateDates }: { st
   }
   function approveImport() {
     const additions: PortfolioCase[] = taxPreviewRows.filter(row => !row.duplicate).map((row, index) => ({
-      ...row, manager: 'טרם שויך', workSeconds: 0, stage: 'waiting', progress: 0, received: 0, required: 12, missing: 12,
+      ...row, manager: currentUser.name, workSeconds: 0, stage: 'waiting', progress: 0, received: 0, required: 12, missing: 12,
       daysWaiting: 0, lastActivity: 'עכשיו · נקלט מרשימת רשות המסים (הדמיה)', id: `import-${Date.now()}-${index}`,
     }))
     setImportedCases(current => current.length ? current : additions)
@@ -84,8 +84,9 @@ export function OfficeDashboard({ state, onOpen, onNotice, onUpdateDates }: { st
   }
   return <>
     <input ref={importInput} hidden type="file" accept="application/pdf,.pdf" onChange={receiveTaxList} />
+    <div className="cp-access-scope"><Users size={16}/><strong>{currentUser.role === 'administrator' ? 'כל לקוחות המשרד' : 'הלקוחות שלי בלבד'}</strong><span>המשתמשת המחוברת: {currentUser.name} · {currentUser.role === 'administrator' ? 'מנהלת מערכת' : 'עובדת משרד'}</span><span>מנהלת חשבונות: גישה רק לאחר הרשאה לתיק</span></div>
     <div className="cp-portfolio-stats">
-      <PortfolioStat icon={<Users />} value={String(cases.length)} label="תיקי הצהרת הון" note="5 פעילים · 1 הושלם" />
+      <PortfolioStat icon={<Users />} value={String(cases.length)} label="תיקי הצהרת הון" note={`${cases.filter(c=>c.stage!=='complete').length} פעילים · לפי הרשאה`} />
       <PortfolioStat icon={<Clock3 />} value={String(waiting)} label="ממתינים ללקוח" note="נדרשת תזכורת או השלמה" alert />
       <PortfolioStat icon={<FileWarning />} value={String(cases.reduce((a, c) => a + c.missing, 0))} label="מסמכים חסרים" note="בכל התיקים הפעילים" />
       <PortfolioStat icon={<CheckCircle2 />} value={`${average}%`} label="התקדמות ממוצעת" note="לפי מסמכים ושלבי עבודה" />
@@ -99,7 +100,7 @@ export function OfficeDashboard({ state, onOpen, onNotice, onUpdateDates }: { st
     </section>}
     <section className="cp-panel cp-portfolio-panel">
       <div className="cp-panel-head"><div><h2>תיקי הצהרות ההון</h2><p>מעקב מרוכז אחר איסוף, בדיקה, השוואה ואישור</p></div><div className="cp-panel-actions"><button className="cp-btn cp-btn-white" onClick={() => importInput.current?.click()}><Upload size={16} />קליטת רשימה מרשות המסים · PDF</button><button className="cp-btn cp-btn-primary" onClick={() => onNotice('פתיחת תיק חדש תתווסף במערכת האמיתית. בדגם קיים תיק פעיל אחד לעריכה וחמישה תיקי מעקב לדוגמה.')}><span>+</span>תיק חדש</button></div></div>
-      <div className="cp-portfolio-tools"><label className="cp-search"><Search size={16} /><input aria-label="חיפוש לקוח" placeholder="חיפוש לפי לקוח, תיק או אחראי…" value={query} onChange={e => setQuery(e.target.value)} /></label><select aria-label="סינון שלב" value={stageFilter} onChange={e => setStageFilter(e.target.value)}><option value="all">כל השלבים</option>{Object.entries(stageLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select aria-label="סינון אחראי" value={managerFilter} onChange={e => setManagerFilter(e.target.value)}><option value="all">כל האחראים</option><option>דנית בן גל</option><option>מיכל אברהם</option><option>אורית לוי</option><option>הדס רון</option></select></div>
+      <div className="cp-portfolio-tools"><label className="cp-search"><Search size={16} /><input aria-label="חיפוש לקוח" placeholder={currentUser.role === 'administrator' ? 'חיפוש בכל לקוחות המשרד…' : 'חיפוש בתוך הלקוחות שלי…'} value={query} onChange={e => setQuery(e.target.value)} /></label><select aria-label="סינון שלב" value={stageFilter} onChange={e => setStageFilter(e.target.value)}><option value="all">כל השלבים</option>{Object.entries(stageLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><span className="cp-assignee-filter">{currentUser.role === 'administrator' ? 'גישת מנהל · כל הלקוחות' : `משויך אליי · ${currentUser.name}`}</span></div>
       <div className="cp-table-wrap">
         <table className="cp-table cp-portfolio-table">
           <thead><tr><th>לקוח ותיק</th><th>שלב נוכחי</th><th>התקדמות</th><th>מסמכים</th><th>אחראי</th><th>שעות עבודה</th><th>תאריך הצהרת הון</th><th>תאריך הגשה</th><th>פעילות אחרונה</th><th /></tr></thead>

@@ -5,7 +5,9 @@ import { AnnualWorksheet } from './AnnualWorksheet'
 import { OfficeDashboard } from './OfficeDashboard'
 import { OfficialDeclaration1219 } from './OfficialDeclaration1219'
 import { worksheetText } from './worksheet'
+import { canAccessClient, type OfficeUser } from './access'
 import './capital.css'
+import './client-access.css'
 
 type Tab = 'clients' | 'personal' | 'overview' | 'documents' | 'declaration' | 'comparison' | 'agent' | 'signature' | 'portal'
 const nav: { id: Tab; label: string; icon: ReactNode; sub: string }[] = [
@@ -19,6 +21,14 @@ const nav: { id: Tab; label: string; icon: ReactNode; sub: string }[] = [
   { id: 'signature', label: 'חבילת חתימה', icon: <FileSignature />, sub: 'הצהרה, נספחים ואישור הלקוח' },
   { id: 'portal', label: 'פורטל הלקוח', icon: <Users />, sub: 'כך זה נראה מהצד שלו' },
 ]
+const currentUser: OfficeUser = { name: 'דנית בן גל', role: 'administrator' }
+const demoClientProfiles = [
+  { id: 'c2', client: 'רונית ויואב כהן', identifier: 'תיק 10195', phone: '052-555-0195', email: 'cohen@example.com', manager: 'מיכל אברהם', status: 'ממתין ללקוח' },
+  { id: 'c3', client: 'חברת אורן ובעלי מניות', identifier: 'תיק 10903', phone: '03-555-0903', email: 'oren@example.com', manager: 'דנית בן גל', status: 'קריאה ובדיקה' },
+  { id: 'c4', client: 'משפחת מזרחי', identifier: 'תיק 9877', phone: '050-555-9877', email: 'mizrahi@example.com', manager: 'אורית לוי', status: 'בקרת המשרד' },
+  { id: 'c5', client: 'אלון שחר', identifier: 'תיק 10641', phone: '054-555-0641', email: 'alon@example.com', manager: 'הדס רון', status: 'הושלם' },
+  { id: 'c6', client: 'נועה וגיל פרץ', identifier: 'תיק 11012', phone: '052-555-1012', email: 'peretz@example.com', manager: 'מיכל אברהם', status: 'איסוף מסמכים' },
+]
 const amount = (raw: string) => Math.max(0, Number(raw) || 0)
 const workTime = (seconds: number) => `${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 function MoneyInput({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) { return <input className="cp-money" type="number" min="0" step="1" aria-label={label} value={value} onChange={e => onChange(amount(e.target.value))} /> }
@@ -30,6 +40,8 @@ export function CapitalPrototype() {
   const [notice, setNotice] = useState('')
   const [storageError, setStorageError] = useState(false)
   const [search, setSearch] = useState('')
+  const [clientLookup, setClientLookup] = useState('')
+  const [selectedProfile, setSelectedProfile] = useState('active')
   const [selected, setSelected] = useState('bankdoc')
   const [filter, setFilter] = useState('all')
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
@@ -45,6 +57,9 @@ export function CapitalPrototype() {
   const missing = state.docs.filter(d => d.status === 'missing')
   const doc = state.docs.find(d => d.id === selected)
   const title = nav.find(n => n.id === tab)!
+  const clientDirectory = [{ id: 'active', client: state.client, identifier: 'תיק 10482', phone: state.personal.phone, email: state.email, manager: currentUser.name, status: 'תיק פעיל לעריכה' }, ...demoClientProfiles].filter(profile => canAccessClient(currentUser, profile))
+  const visibleClientProfiles = clientDirectory.filter(profile => `${profile.client} ${profile.identifier} ${profile.phone} ${profile.email}`.toLowerCase().includes(clientLookup.trim().toLowerCase()))
+  const viewedProfile = clientDirectory.find(profile => profile.id === selectedProfile) ?? clientDirectory[0]
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); setStorageError(false) } catch { setStorageError(true) } }, [state])
   useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 5000); return () => clearTimeout(timer) }, [notice])
   useEffect(() => {
@@ -144,19 +159,21 @@ export function CapitalPrototype() {
         <div className="cp-page-heading"><div><div className="cp-eyebrow">CAPITAL WORKSPACE <span /> {title.sub}</div><h1>{title.label}</h1><p>{tab === 'clients' ? 'כל תיקי הצהרות ההון, קצב ההתקדמות והחריגים במקום אחד.' : 'מהמסמך הראשון ועד לתמונה המלאה של ההון.'}</p></div>{tab !== 'clients' && <div className="cp-heading-actions"><button className="cp-btn cp-btn-white" onClick={() => exportFile('report')}><Download size={16} />נייר עבודה</button><button className="cp-btn cp-btn-primary" onClick={() => { setTab('documents'); upload(null, 'office') }}><Plus size={17} />צירוף מסמכים</button></div>}</div>
         {tab !== 'clients' && <div className="cp-case-bar"><button className="cp-return-clients" onClick={() => setTab('clients')}><Users size={15} />כל התיקים</button><span className="cp-client-avatar">דל</span><button className="cp-case-title cp-case-title-button" onClick={()=>setTab('personal')}><strong>{state.client}</strong><small>לחצי לפתיחת כרטיס הלקוח · נתוני הדגמה</small></button><div className="cp-case-date"><small>הצהרה קודמת</small><strong>{state.previousDate.split('-').reverse().join('.')}</strong></div><ChevronLeft size={18} className="cp-date-arrow" /><div className="cp-case-date"><small>תאריך הצהרת הון</small><strong>{state.currentDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-filing-date"><small>תאריך הגשה</small><strong>{state.filingDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-work-counter"><small><Clock3 size={13}/>זמן עבודה · מודד כעת</small><strong>{workTime(state.workSeconds)}</strong></div><Badge tone="amber">בהכנה · נדרשת בדיקה</Badge></div>}
 
-        {tab === 'clients' && <OfficeDashboard state={state} onOpen={(target='overview') => setTab(target)} onNotice={setNotice} onUpdateDates={(currentDate,filingDate)=>change(s=>({...s,currentDate,filingDate}),'עודכנו תאריך הצהרת ההון ותאריך ההגשה מקליטת רשות המסים; יתר נתוני התיק נשמרו')} />}
+        {tab === 'clients' && <OfficeDashboard state={state} currentUser={currentUser} onOpen={(target='overview') => setTab(target)} onNotice={setNotice} onUpdateDates={(currentDate,filingDate)=>change(s=>({...s,currentDate,filingDate}),'עודכנו תאריך הצהרת ההון ותאריך ההגשה מקליטת רשות המסים; יתר נתוני התיק נשמרו')} />}
 
         {state.worksheet?.capitalSource === 'imported-summary' && tab !== 'comparison' && <div className="cp-info"><FileText size={18}/><div><strong>השוואת ההון משתמשת בסיכומים ממסמך חיצוני.</strong><p>תאריכי ההשוואה: {state.worksheet.previousDate} — {state.worksheet.currentDate}. פירוט ההצהרה והמסמכים לדוגמה לא הוחלפו בסיכומי הצילום.</p></div></div>}
 
         {tab === 'personal' && <>
           <div className="cp-info"><Users size={19}/><div><strong>כרטיס הלקוח</strong><p>מסך נפרד לפרטים אישיים, פרטי קשר והרכב המשפחה. הנתונים משמשים את ההצהרה ואת חבילת החתימה, אך אינם נערכים בתוך מסך הצהרת ההון.</p></div></div>
+          <section className="cp-panel cp-client-picker"><div className="cp-panel-head"><div><h2>בחירת לקוח</h2><p>החיפוש מציג לקוחות לפי תפקיד והרשאות המשתמש המחובר</p></div><Badge tone="mint">{currentUser.role==='administrator'?'כל לקוחות המשרד':'הלקוחות שלי בלבד'}</Badge></div><label className="cp-search"><Search size={17}/><input aria-label="חיפוש ובחירת לקוח בכרטיס" placeholder="חיפוש לפי שם, מספר תיק, טלפון או מייל…" value={clientLookup} onChange={e=>setClientLookup(e.target.value)}/></label><div className="cp-client-results">{visibleClientProfiles.map(profile=><button className={selectedProfile===profile.id?'selected':''} key={profile.id} onClick={()=>setSelectedProfile(profile.id)}><span className="cp-client-avatar">{profile.client.split(' ').map(word=>word[0]).slice(0,2).join('')}</span><span><strong>{profile.client}</strong><small>{profile.identifier} · {profile.status}</small></span>{profile.id==='active'&&<Badge tone="mint">פתוח לעריכה</Badge>}</button>)}{!visibleClientProfiles.length&&<div className="cp-empty">לא נמצא לקוח מורשה לפי החיפוש.</div>}</div><div className="cp-permission-note"><ShieldCheck size={16}/><span>מנהל מערכת רואה את כל הלקוחות. מנהלת חשבונות תראה רק תיקים שקיבלה אליהם הרשאה מפורשת.</span></div></section>
+          {selectedProfile === 'active' ? <>
           <section className="cp-panel cp-details"><div className="cp-panel-head"><div><h2>פרטי לקוח ופרטי קשר</h2><p>לחיצה על שם הלקוח ברשימת התיקים פותחת מסך זה</p></div><Badge>כרטיס לקוח</Badge></div><div className="cp-form-grid cp-personal-grid"><label className="cp-label">שם הלקוח / המשפחה<input value={state.client} onChange={e=>change(s=>({...s,client:e.target.value,draft:null}))}/></label><label className="cp-label">מספר זהות<input inputMode="numeric" value={state.personal.clientId} onChange={e=>change(s=>({...s,personal:{...s.personal,clientId:e.target.value}}))}/></label><label className="cp-label">תאריך לידה<input type="date" value={state.personal.birthDate} onChange={e=>change(s=>({...s,personal:{...s.personal,birthDate:e.target.value}}))}/></label><label className="cp-label">מצב משפחתי<select value={state.personal.maritalStatus} onChange={e=>change(s=>({...s,personal:{...s.personal,maritalStatus:e.target.value as CapitalState['personal']['maritalStatus']}}))}><option value="married">נשוי/אה</option><option value="single">רווק/ה</option><option value="divorced">גרוש/ה</option><option value="widowed">אלמן/ה</option><option value="separated">פרוד/ה</option></select></label><label className="cp-label">מייל הלקוח<input type="email" value={state.email} onChange={e=>change(s=>({...s,email:e.target.value,draft:null}))}/></label><label className="cp-label">טלפון<input type="tel" value={state.personal.phone} onChange={e=>change(s=>({...s,personal:{...s.personal,phone:e.target.value}}))}/></label><label className="cp-label cp-wide-label">כתובת מלאה<input value={state.personal.address} onChange={e=>change(s=>({...s,personal:{...s.personal,address:e.target.value}}))}/></label></div></section>
           <section className="cp-panel cp-details"><div className="cp-panel-head"><div><h2>בן או בת הזוג</h2><p>פרטים משפחתיים המשמשים להכנת ההצהרה</p></div></div><div className="cp-form-grid cp-personal-grid"><label className="cp-label">שם בן/בת הזוג<input value={state.personal.spouseName} onChange={e=>change(s=>({...s,personal:{...s.personal,spouseName:e.target.value}}))}/></label><label className="cp-label">ת״ז בן/בת הזוג<input inputMode="numeric" value={state.personal.spouseId} onChange={e=>change(s=>({...s,personal:{...s.personal,spouseId:e.target.value}}))}/></label><label className="cp-label">תאריך לידת בן/בת הזוג<input type="date" value={state.personal.spouseBirthDate} onChange={e=>change(s=>({...s,personal:{...s.personal,spouseBirthDate:e.target.value}}))}/></label></div></section>
           <section className="cp-panel cp-details">
             <div className="cp-panel-head"><div><h2>ילדים</h2><p>הפרטים נדרשים לבדיקת נכסים והתחייבויות של ילדים שטרם מלאו להם 18</p></div><label className="cp-child-count">מספר ילדים<input aria-label="מספר ילדים" type="number" min="0" max="20" value={state.children.length} onChange={e=>resizeChildren(Number(e.target.value))}/></label></div>
             <div className="cp-table-wrap"><table className="cp-table cp-children-table"><thead><tr><th>שם מלא</th><th>מספר זהות</th><th>תאריך לידה</th><th /></tr></thead><tbody>{state.children.map((child,index)=><tr key={child.id}><td><input aria-label={`שם ילד ${index+1}`} value={child.name} onChange={e=>change(s=>({...s,children:s.children.map(c=>c.id===child.id?{...c,name:e.target.value}:c)}))}/></td><td><input aria-label={`תעודת זהות ילד ${index+1}`} inputMode="numeric" value={child.identityNumber} onChange={e=>change(s=>({...s,children:s.children.map(c=>c.id===child.id?{...c,identityNumber:e.target.value}:c)}))}/></td><td><input aria-label={`תאריך לידה ילד ${index+1}`} type="date" value={child.birthDate} onChange={e=>change(s=>({...s,children:s.children.map(c=>c.id===child.id?{...c,birthDate:e.target.value}:c)}))}/></td><td><button className="cp-icon-close" aria-label={`מחיקת ילד ${index+1}`} onClick={()=>change(s=>({...s,children:s.children.filter(c=>c.id!==child.id)}),'נמחק ילד מרשימת הפרטים')}><Trash2 size={16}/></button></td></tr>)}</tbody></table></div>
             <button className="cp-text-btn cp-add-line" onClick={()=>resizeChildren(state.children.length+1)}><Plus size={15}/>הוספת ילד</button>
-          </section>
+          </section></> : <section className="cp-panel cp-details cp-readonly-client"><div className="cp-panel-head"><div><h2>{viewedProfile.client}</h2><p>{viewedProfile.identifier} · כרטיס מעקב מורשה</p></div><Badge tone="blue">קריאה בלבד בדגם</Badge></div><div className="cp-form-grid cp-personal-grid"><label className="cp-label">שם הלקוח<input value={viewedProfile.client} readOnly/></label><label className="cp-label">מספר תיק<input value={viewedProfile.identifier} readOnly/></label><label className="cp-label">טלפון<input value={viewedProfile.phone} readOnly/></label><label className="cp-label">מייל<input value={viewedProfile.email} readOnly/></label><label className="cp-label">עובד אחראי<input value={viewedProfile.manager} readOnly/></label><label className="cp-label">מצב התיק<input value={viewedProfile.status} readOnly/></label></div><p className="cp-footnote">זהו כרטיס מעקב לדוגמה. במערכת המלאה ייטענו רק נתוני התיק שנבחר ורק בהתאם להרשאות העובד.</p></section>}
         </>}
 
         {tab === 'overview' && <>
