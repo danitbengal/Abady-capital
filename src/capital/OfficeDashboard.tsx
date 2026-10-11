@@ -11,6 +11,7 @@ interface PortfolioCase {
   manager: string
   declarationDate: string
   filingDate: string
+  workSeconds: number
   stage: Stage
   progress: number
   received: number
@@ -26,6 +27,7 @@ const stageLabel: Record<Stage, string> = {
 }
 const stageTone: Record<Stage, string> = { waiting: 'amber', documents: 'blue', review: 'blue', comparison: 'mint', approval: 'amber', complete: 'mint' }
 const displayDate = (value: string) => value.split('-').reverse().join('.')
+const displayWorkTime = (seconds: number) => `${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`
 
 const newTaxCases = [
   { id: 'tax-1', client: 'יעל ואמיר ברק', identifier: 'תיק 11241', declarationDate: '2025-12-31', filingDate: '2026-12-15', duplicate: false },
@@ -37,12 +39,12 @@ function demoCases(state: CapitalState): PortfolioCase[] {
   const reviewed = state.docs.filter(d => d.status === 'reviewed').length
   const progress = Math.round(((received / Math.max(state.docs.length, 1)) * 60) + ((reviewed / Math.max(state.docs.length, 1)) * 40))
   return [
-    { id: 'active', client: state.client, identifier: 'תיק 10482', manager: 'דנית בן גל', declarationDate: state.currentDate, filingDate: state.filingDate, stage: state.worksheet ? 'comparison' : 'documents', progress, received, required: state.docs.length, missing: state.docs.length - received, daysWaiting: 4, lastActivity: 'היום · עודכנה השוואת הון', active: true },
-    { id: 'c2', client: 'רונית ויואב כהן', identifier: 'תיק 10195', manager: 'מיכל אברהם', declarationDate: '2024-12-31', filingDate: '2026-11-30', stage: 'waiting', progress: 24, received: 5, required: 14, missing: 9, daysWaiting: 12, lastActivity: 'לפני 5 ימים · נשלחה תזכורת' },
-    { id: 'c3', client: 'חברת אורן ובעלי מניות', identifier: 'תיק 10903', manager: 'דנית בן גל', declarationDate: '2025-12-31', filingDate: '2026-10-31', stage: 'review', progress: 58, received: 18, required: 22, missing: 4, daysWaiting: 1, lastActivity: 'אתמול · נקראו מסמכי הבנק' },
-    { id: 'c4', client: 'משפחת מזרחי', identifier: 'תיק 9877', manager: 'אורית לוי', declarationDate: '2023-12-31', filingDate: '2026-10-20', stage: 'approval', progress: 88, received: 16, required: 16, missing: 0, daysWaiting: 0, lastActivity: 'היום · ממתין לבקרת מנהלת' },
-    { id: 'c5', client: 'אלון שחר', identifier: 'תיק 10641', manager: 'הדס רון', declarationDate: '2024-12-31', filingDate: '2026-09-30', stage: 'complete', progress: 100, received: 12, required: 12, missing: 0, daysWaiting: 0, lastActivity: 'לפני 3 ימים · התיק הושלם' },
-    { id: 'c6', client: 'נועה וגיל פרץ', identifier: 'תיק 11012', manager: 'מיכל אברהם', declarationDate: '2025-06-30', filingDate: '2026-11-15', stage: 'documents', progress: 41, received: 7, required: 15, missing: 8, daysWaiting: 8, lastActivity: 'לפני יומיים · התקבלו 2 מסמכים' },
+    { id: 'active', client: state.client, identifier: 'תיק 10482', manager: 'דנית בן גל', declarationDate: state.currentDate, filingDate: state.filingDate, workSeconds: state.workSeconds, stage: state.worksheet ? 'comparison' : 'documents', progress, received, required: state.docs.length, missing: state.docs.length - received, daysWaiting: 4, lastActivity: 'היום · עודכנה השוואת הון', active: true },
+    { id: 'c2', client: 'רונית ויואב כהן', identifier: 'תיק 10195', manager: 'מיכל אברהם', declarationDate: '2024-12-31', filingDate: '2026-11-30', workSeconds: 8940, stage: 'waiting', progress: 24, received: 5, required: 14, missing: 9, daysWaiting: 12, lastActivity: 'לפני 5 ימים · נשלחה תזכורת' },
+    { id: 'c3', client: 'חברת אורן ובעלי מניות', identifier: 'תיק 10903', manager: 'דנית בן גל', declarationDate: '2025-12-31', filingDate: '2026-10-31', workSeconds: 22800, stage: 'review', progress: 58, received: 18, required: 22, missing: 4, daysWaiting: 1, lastActivity: 'אתמול · נקראו מסמכי הבנק' },
+    { id: 'c4', client: 'משפחת מזרחי', identifier: 'תיק 9877', manager: 'אורית לוי', declarationDate: '2023-12-31', filingDate: '2026-10-20', workSeconds: 35100, stage: 'approval', progress: 88, received: 16, required: 16, missing: 0, daysWaiting: 0, lastActivity: 'היום · ממתין לבקרת מנהלת' },
+    { id: 'c5', client: 'אלון שחר', identifier: 'תיק 10641', manager: 'הדס רון', declarationDate: '2024-12-31', filingDate: '2026-09-30', workSeconds: 41220, stage: 'complete', progress: 100, received: 12, required: 12, missing: 0, daysWaiting: 0, lastActivity: 'לפני 3 ימים · התיק הושלם' },
+    { id: 'c6', client: 'נועה וגיל פרץ', identifier: 'תיק 11012', manager: 'מיכל אברהם', declarationDate: '2025-06-30', filingDate: '2026-11-15', workSeconds: 16560, stage: 'documents', progress: 41, received: 7, required: 15, missing: 8, daysWaiting: 8, lastActivity: 'לפני יומיים · התקבלו 2 מסמכים' },
   ]
 }
 
@@ -71,7 +73,7 @@ export function OfficeDashboard({ state, onOpen, onNotice, onUpdateDates }: { st
   }
   function approveImport() {
     const additions: PortfolioCase[] = taxPreviewRows.filter(row => !row.duplicate).map((row, index) => ({
-      ...row, manager: 'טרם שויך', stage: 'waiting', progress: 0, received: 0, required: 12, missing: 12,
+      ...row, manager: 'טרם שויך', workSeconds: 0, stage: 'waiting', progress: 0, received: 0, required: 12, missing: 12,
       daysWaiting: 0, lastActivity: 'עכשיו · נקלט מרשימת רשות המסים (הדמיה)', id: `import-${Date.now()}-${index}`,
     }))
     setImportedCases(current => current.length ? current : additions)
@@ -100,12 +102,12 @@ export function OfficeDashboard({ state, onOpen, onNotice, onUpdateDates }: { st
       <div className="cp-portfolio-tools"><label className="cp-search"><Search size={16} /><input aria-label="חיפוש לקוח" placeholder="חיפוש לפי לקוח, תיק או אחראי…" value={query} onChange={e => setQuery(e.target.value)} /></label><select aria-label="סינון שלב" value={stageFilter} onChange={e => setStageFilter(e.target.value)}><option value="all">כל השלבים</option>{Object.entries(stageLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select aria-label="סינון אחראי" value={managerFilter} onChange={e => setManagerFilter(e.target.value)}><option value="all">כל האחראים</option><option>דנית בן גל</option><option>מיכל אברהם</option><option>אורית לוי</option><option>הדס רון</option></select></div>
       <div className="cp-table-wrap">
         <table className="cp-table cp-portfolio-table">
-          <thead><tr><th>לקוח ותיק</th><th>שלב נוכחי</th><th>התקדמות</th><th>מסמכים</th><th>אחראי</th><th>תאריך הצהרת הון</th><th>תאריך הגשה</th><th>פעילות אחרונה</th><th /></tr></thead>
+          <thead><tr><th>לקוח ותיק</th><th>שלב נוכחי</th><th>התקדמות</th><th>מסמכים</th><th>אחראי</th><th>שעות עבודה</th><th>תאריך הצהרת הון</th><th>תאריך הגשה</th><th>פעילות אחרונה</th><th /></tr></thead>
           <tbody>{visible.map(c => <tr key={c.id} className={c.active ? 'active-case' : ''}>
             <td><button className="cp-client-name" onClick={() => c.active ? onOpen('personal') : onNotice(`${c.client}: זהו תיק מעקב לדוגמה. בדגם הנוכחי רק כרטיס משפחת לוי פעיל.`)}>{c.client}</button><small>{c.identifier}{c.active ? ' · לחצי על השם לפתיחת כרטיס הלקוח' : ' · נתוני מעקב לדוגמה'}</small></td>
             <td><span className={`cp-badge cp-${stageTone[c.stage]}`}>{stageLabel[c.stage]}</span>{c.daysWaiting >= 7 && <small className="cp-waiting-note">ממתין {c.daysWaiting} ימים</small>}</td>
             <td><div className="cp-case-progress"><span><i style={{ width: `${c.progress}%` }} /></span><strong>{c.progress}%</strong></div></td>
-            <td><strong>{c.received} / {c.required}</strong><small>{c.missing ? `${c.missing} חסרים` : 'הכול התקבל'}</small></td><td>{c.manager}</td>
+            <td><strong>{c.received} / {c.required}</strong><small>{c.missing ? `${c.missing} חסרים` : 'הכול התקבל'}</small></td><td>{c.manager}</td><td><strong className="cp-work-time">{displayWorkTime(c.workSeconds)}</strong><small>שעות:דקות</small></td>
             <td><span><CalendarDays size={14} />{displayDate(c.declarationDate)}</span></td><td><span className={new Date(c.filingDate) < new Date('2026-10-11') && c.stage !== 'complete' ? 'cp-date-risk' : ''}><CalendarDays size={14} />{displayDate(c.filingDate)}</span></td>
             <td><small>{c.lastActivity}</small></td><td>{c.active ? <button className="cp-open-case" onClick={() => onOpen('overview')}>פתיחת התיק<ArrowLeft size={14} /></button> : <button className="cp-open-case muted" onClick={() => onNotice(`${c.client}: זהו תיק מעקב לדוגמה. בדגם הנוכחי רק תיק משפחת לוי פתוח לעריכה.`)}>תצוגת מעקב</button>}</td>
           </tr>)}</tbody>

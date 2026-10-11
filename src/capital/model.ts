@@ -10,7 +10,7 @@ export interface PersonalDetails { clientId: string; birthDate: string; maritalS
 export interface ChildDetails { id: string; name: string; identityNumber: string; birthDate: string }
 export interface AnnexItem { id: string; label: string; selected: boolean; included: boolean }
 export interface SignaturePackage { acknowledgementFileName: string; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
-export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; filingDate: string; personal: PersonalDetails; children: ChildDetails[]; officeNotes: string; annexes: AnnexItem[]; signature: SignaturePackage; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
+export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; filingDate: string; workSeconds: number; personal: PersonalDetails; children: ChildDetails[]; officeNotes: string; annexes: AnnexItem[]; signature: SignaturePackage; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
 export const sections: Record<Section, string> = { property: 'נדל״ן', bank: 'בנקים ומזומנים', investments: 'חסכונות והשקעות', business: 'נכסים בעסק', movables: 'רכב ותכולה', liability: 'התחייבויות' }
 export const statusLabels: Record<DocStatus, string> = { missing: 'חסר', uploaded: 'ממתין לקריאה', extracted: 'ממתין לבדיקה', reviewed: 'נבדק ואושר' }
 export const currency = (n: number) => new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n)
@@ -68,7 +68,7 @@ export function simulateSend(draft: Draft): Draft {
   return { ...draft, state: 'simulated' }
 }
 export function seedState(): CapitalState {
-  return { version: 1, client: 'דניאל ומאיה לוי', email: 'client@example.com', previousDate: '2020-12-31', currentDate: '2025-12-31', filingDate: '2026-12-31',
+  return { version: 1, client: 'דניאל ומאיה לוי', email: 'client@example.com', previousDate: '2020-12-31', currentDate: '2025-12-31', filingDate: '2026-12-31', workSeconds: 13320,
     personal: { clientId: '012345678', birthDate: '1981-04-18', maritalStatus: 'married', phone: '050-0000000', address: 'רחוב הדוגמה 12, תל אביב', spouseName: 'מאיה לוי', spouseId: '987654321', spouseBirthDate: '1983-09-07' },
     children: [
       { id: 'child-1', name: 'עומר לוי', identityNumber: '000000001', birthDate: '2012-03-14' },
@@ -119,7 +119,7 @@ export function loadState(): CapitalState {
     const s = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
     if (s?.version === 1 && Array.isArray(s.lines) && Array.isArray(s.docs) && Array.isArray(s.flows)) {
       const defaults = seedState()
-      return { ...defaults, ...s, filingDate: s.filingDate ?? defaults.filingDate, personal: { ...defaults.personal, ...s.personal }, children: Array.isArray(s.children) ? s.children : defaults.children, annexes: Array.isArray(s.annexes) ? s.annexes : defaults.annexes, signature: { ...defaults.signature, ...s.signature }, officeNotes: s.officeNotes ?? defaults.officeNotes }
+      return { ...defaults, ...s, filingDate: s.filingDate ?? defaults.filingDate, workSeconds: Number.isFinite(s.workSeconds) ? s.workSeconds : defaults.workSeconds, personal: { ...defaults.personal, ...s.personal }, children: Array.isArray(s.children) ? s.children : defaults.children, annexes: Array.isArray(s.annexes) ? s.annexes : defaults.annexes, signature: { ...defaults.signature, ...s.signature }, officeNotes: s.officeNotes ?? defaults.officeNotes }
     }
   } catch { /* fall back to demo */ }
   return seedState()

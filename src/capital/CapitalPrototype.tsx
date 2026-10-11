@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, ArrowUpLeft, Check, CheckCheck, ChevronLeft, CircleHelp, ClipboardList, Download, FileCheck2, FileSignature, FileText, FolderOpen, Landmark, LayoutDashboard, Mail, MessageCircle, Plus, ScanLine, Search, ShieldCheck, Sparkles, Trash2, Upload, Users, Wallet, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpLeft, Check, CheckCheck, ChevronLeft, CircleHelp, ClipboardList, Clock3, Download, FileCheck2, FileSignature, FileText, FolderOpen, Landmark, LayoutDashboard, Mail, MessageCircle, Plus, ScanLine, Search, ShieldCheck, Sparkles, Trash2, Upload, Users, Wallet, X } from 'lucide-react'
 import { approvedDraft, compare, currency, findings, loadState, makeDraft, sections, seedState, simulateSend, statusLabels, STORAGE_KEY, totals, type CapitalDocument, type CapitalState, type Section } from './model'
 import { AnnualWorksheet } from './AnnualWorksheet'
 import { OfficeDashboard } from './OfficeDashboard'
@@ -19,6 +19,7 @@ const nav: { id: Tab; label: string; icon: ReactNode; sub: string }[] = [
   { id: 'portal', label: 'פורטל הלקוח', icon: <Users />, sub: 'כך זה נראה מהצד שלו' },
 ]
 const amount = (raw: string) => Math.max(0, Number(raw) || 0)
+const workTime = (seconds: number) => `${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 function MoneyInput({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) { return <input className="cp-money" type="number" min="0" step="1" aria-label={label} value={value} onChange={e => onChange(amount(e.target.value))} /> }
 function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: string }) { return <span className={`cp-badge cp-${tone}`}>{children}</span> }
 
@@ -45,6 +46,22 @@ export function CapitalPrototype() {
   const title = nav.find(n => n.id === tab)!
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); setStorageError(false) } catch { setStorageError(true) } }, [state])
   useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 5000); return () => clearTimeout(timer) }, [notice])
+  useEffect(() => {
+    if (tab === 'clients') return
+    let lastTick = Date.now()
+    const tick = () => {
+      const now = Date.now()
+      if (document.visibilityState === 'visible') {
+        const elapsed = Math.min(5, Math.floor((now - lastTick) / 1000))
+        if (elapsed > 0) setState(s => ({ ...s, workSeconds: s.workSeconds + elapsed }))
+      }
+      lastTick = now
+    }
+    const resetTick = () => { lastTick = Date.now() }
+    const timer = window.setInterval(tick, 1000)
+    document.addEventListener('visibilitychange', resetTick)
+    return () => { tick(); window.clearInterval(timer); document.removeEventListener('visibilitychange', resetTick) }
+  }, [tab])
   function change(update: (s: CapitalState) => CapitalState, event?: string) {
     setState(s => {
       const next = update(s)
@@ -124,7 +141,7 @@ export function CapitalPrototype() {
       <header className="cp-topbar"><div>הצהרות הון <ChevronLeft size={14} /><strong>{tab === 'clients' ? 'מרכז שליטה למשרד' : `תיק · ${state.client}`}</strong></div><div className="cp-top-actions"><span className="cp-save-dot" /><small>{storageError ? 'השמירה המקומית נכשלה — הורידו גיבוי' : 'הדגם נשמר בדפדפן זה'}</small><button aria-label="הסבר על הדגם" onClick={() => setNotice('זהו דגם אינטראקטיבי. OCR, קבלת מייל/וואטסאפ ושליחה הם הדמיה. אין חיבור לנתוני CRM או למסד Supabase.')}><CircleHelp size={19} /></button></div></header>
       <main className="cp-main">
         <div className="cp-page-heading"><div><div className="cp-eyebrow">CAPITAL WORKSPACE <span /> {title.sub}</div><h1>{title.label}</h1><p>{tab === 'clients' ? 'כל תיקי הצהרות ההון, קצב ההתקדמות והחריגים במקום אחד.' : 'מהמסמך הראשון ועד לתמונה המלאה של ההון.'}</p></div>{tab !== 'clients' && <div className="cp-heading-actions"><button className="cp-btn cp-btn-white" onClick={() => exportFile('report')}><Download size={16} />נייר עבודה</button><button className="cp-btn cp-btn-primary" onClick={() => { setTab('documents'); upload(null, 'office') }}><Plus size={17} />צירוף מסמכים</button></div>}</div>
-        {tab !== 'clients' && <div className="cp-case-bar"><button className="cp-return-clients" onClick={() => setTab('clients')}><Users size={15} />כל התיקים</button><span className="cp-client-avatar">דל</span><button className="cp-case-title cp-case-title-button" onClick={()=>setTab('personal')}><strong>{state.client}</strong><small>לחצי לפתיחת כרטיס הלקוח · נתוני הדגמה</small></button><div className="cp-case-date"><small>הצהרה קודמת</small><strong>{state.previousDate.split('-').reverse().join('.')}</strong></div><ChevronLeft size={18} className="cp-date-arrow" /><div className="cp-case-date"><small>תאריך הצהרת הון</small><strong>{state.currentDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-filing-date"><small>תאריך הגשה</small><strong>{state.filingDate.split('-').reverse().join('.')}</strong></div><Badge tone="amber">בהכנה · נדרשת בדיקה</Badge></div>}
+        {tab !== 'clients' && <div className="cp-case-bar"><button className="cp-return-clients" onClick={() => setTab('clients')}><Users size={15} />כל התיקים</button><span className="cp-client-avatar">דל</span><button className="cp-case-title cp-case-title-button" onClick={()=>setTab('personal')}><strong>{state.client}</strong><small>לחצי לפתיחת כרטיס הלקוח · נתוני הדגמה</small></button><div className="cp-case-date"><small>הצהרה קודמת</small><strong>{state.previousDate.split('-').reverse().join('.')}</strong></div><ChevronLeft size={18} className="cp-date-arrow" /><div className="cp-case-date"><small>תאריך הצהרת הון</small><strong>{state.currentDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-filing-date"><small>תאריך הגשה</small><strong>{state.filingDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-work-counter"><small><Clock3 size={13}/>זמן עבודה · מודד כעת</small><strong>{workTime(state.workSeconds)}</strong></div><Badge tone="amber">בהכנה · נדרשת בדיקה</Badge></div>}
 
         {tab === 'clients' && <OfficeDashboard state={state} onOpen={(target='overview') => setTab(target)} onNotice={setNotice} onUpdateDates={(currentDate,filingDate)=>change(s=>({...s,currentDate,filingDate}),'עודכנו תאריך הצהרת ההון ותאריך ההגשה מקליטת רשות המסים; יתר נתוני התיק נשמרו')} />}
 
