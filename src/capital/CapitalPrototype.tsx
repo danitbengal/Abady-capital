@@ -50,6 +50,7 @@ export function CapitalPrototype() {
   const [selected, setSelected] = useState('bankdoc')
   const [filter, setFilter] = useState('all')
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
+  const [uploadWorksheetRowId, setUploadWorksheetRowId] = useState<string | null>(null)
   const [uploadSource, setUploadSource] = useState<'office' | 'client'>('office')
   const [agentRun, setAgentRun] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -134,7 +135,7 @@ export function CapitalPrototype() {
     setClientLookup('')
     setTab('clientSelect')
   }
-  function upload(id: string | null, source: 'office' | 'client') { setUploadTarget(id); setUploadSource(source); fileInput.current?.click() }
+  function upload(id: string | null, source: 'office' | 'client', worksheetRowId: string | null = null) { setUploadTarget(id); setUploadWorksheetRowId(worksheetRowId); setUploadSource(source); fileInput.current?.click() }
   function receive(files: FileList | null) {
     if (!files?.length) return
     const allowed = Array.from(files).filter(f => /\.(pdf|png|jpe?g|xlsx?|csv)$/i.test(f.name) && f.size <= 20 * 1024 * 1024)
@@ -148,12 +149,13 @@ export function CapitalPrototype() {
           docs[target] = { ...docs[target], fileName: f.name, source: uploadSource, status: 'uploaded', form1219EntryId: expectedEntry, routingState: uploadSource === 'client' ? 'suggested' : 'confirmed', routingNote: uploadSource === 'client' ? 'המסמך הגיע מדרישה המקושרת לשורה; הסוכן סימן את שם הקובץ והמיקום לבדיקה.' : 'צורף ואושר במשרד.', sample: false, confidence: undefined, extracted: undefined }
         } else {
           const suggestedEntry = inferForm1219Entry(f.name, s.form1219Entries)
-          docs.push({ id: `upload-${Date.now()}-${i}`, title: f.name, fileName: f.name, category: suggestedEntry ? `שיוך אוטומטי · קוד ${suggestedEntry.code}` : 'לסיווג המשרד', source: uploadSource, status: 'uploaded', form1219EntryId: suggestedEntry?.id, routingState: suggestedEntry ? 'suggested' : 'unassigned', routingNote: suggestedEntry ? `הסוכן הציע את השורה לפי שם הקובץ: ${f.name}` : 'הסוכן לא זיהה שורת יעד לפי שם הקובץ.', sample: false })
+          docs.push({ id: `upload-${Date.now()}-${i}`, title: f.name, fileName: f.name, category: uploadWorksheetRowId ? 'אסמכתה למקורות ושימושים' : suggestedEntry ? `שיוך אוטומטי · קוד ${suggestedEntry.code}` : 'לסיווג המשרד', source: uploadSource, status: 'uploaded', worksheetRowId: uploadWorksheetRowId ?? undefined, form1219EntryId: uploadWorksheetRowId ? undefined : suggestedEntry?.id, routingState: uploadWorksheetRowId ? 'confirmed' : suggestedEntry ? 'suggested' : 'unassigned', routingNote: uploadWorksheetRowId ? 'המסמך צורף ישירות לשורה שנבחרה במקורות ובשימושים.' : suggestedEntry ? `הסוכן הציע את השורה לפי שם הקובץ: ${f.name}` : 'הסוכן לא זיהה שורת יעד לפי שם הקובץ.', sample: false })
         }
       })
       return { ...s, docs }
     }, `נרשמו ${allowed.length} קבצים מ${uploadSource === 'client' ? 'פורטל הלקוח' : 'המשרד'} בדגם`)
-    setNotice('המסמכים נותבו לשורות לפי הדרישה או שם הקובץ. יש לבדוק את השיוך במסך המסמכים; תוכן הקבצים אינו נשמר בדגם.')
+    setNotice(uploadWorksheetRowId ? 'המסמך צורף לשורה במקורות ובשימושים. בדגם נשמר שם הקובץ בלבד.' : 'המסמכים נותבו לשורות לפי הדרישה או שם הקובץ. יש לבדוק את השיוך במסך המסמכים; תוכן הקבצים אינו נשמר בדגם.')
+    setUploadWorksheetRowId(null)
     if (fileInput.current) fileInput.current.value = ''
   }
   function receiveSignatureFile(files: FileList | null) {
@@ -254,7 +256,7 @@ export function CapitalPrototype() {
           <section className="cp-panel cp-details cp-final-notes"><div className="cp-panel-head"><div><h2>הערות בסוף הקובץ</h2><p>הטקסט ייכלל בסוף חבילת ההצהרה שתועבר ללקוח</p></div><FileText size={21}/></div><label className="cp-label">הערות המשרד<textarea rows={5} value={state.officeNotes} placeholder="הערות, הסתייגויות או הנחיות ללקוח…" onChange={e=>change(s=>({...s,officeNotes:e.target.value}))}/></label></section>
         </>}
 
-        {tab === 'comparison' && <AnnualWorksheet state={state} onChange={(worksheet, event) => change(s => ({ ...s, worksheet }), event)} onNotice={setNotice} />}
+        {tab === 'comparison' && <AnnualWorksheet state={state} onChange={(worksheet, event) => change(s => ({ ...s, worksheet }), event)} onNotice={setNotice} onAttachDocument={rowId => upload(null, 'office', rowId)} onOpenDocument={documentId => { setSelected(documentId); setTab('documents') }} />}
 
         {tab === 'agent' && <div className="cp-document-grid"><section className="cp-panel"><div className="cp-panel-head"><div><h2>דוח סוכן הבדיקה</h2><p>{agentRun?'הבדיקה הושלמה לפי הנתונים הנוכחיים':'ממצאים מחושבים מתוך התיק · אפשר להריץ בדיקה'}</p></div><button className="cp-btn cp-btn-primary" onClick={()=>{setAgentRun(true);change(s=>s,'הופקה בדיקת חוסרים והשוואת הון');setAgentRun(true);setNotice('בדיקת הדגם הושלמה. יש לעבור על הממצאים לפני פנייה ללקוח.')}}><Sparkles size={16}/>בדיקת התיק</button></div><div className="cp-review-summary"><ShieldCheck/><div><strong>החלטות נשארות אצל המשרד.</strong><p>הסוכן מרכז ממצאים והצעות. הוא אינו מאשר נתונים, שולח הודעות או מגיש הצהרה.</p></div></div>{issues.map((issue,i)=><div className={`cp-finding ${issue.level}`} key={i}><span>{String(i+1).padStart(2,'0')}</span><div><strong>{issue.title}</strong><p>{issue.detail}</p></div><Badge tone={issue.level==='high'?'amber':issue.level==='medium'?'blue':'neutral'}>{issue.level==='high'?'נדרשת השלמה':issue.level==='medium'?'לבדיקה':'בקרה'}</Badge></div>)}</section>
           <section className="cp-panel cp-draft-panel"><div className="cp-panel-head"><div><h2>פנייה ללקוח</h2><p>טיוטה → בדיקה → אישור → הדמיית שליחה</p></div><Mail size={22}/></div><div className="cp-channel-tabs"><button className={state.draft?.channel!=='whatsapp'?'active':''} onClick={()=>change(s=>({...s,draft:makeDraft(s,'email')}),'נוצרה טיוטת מייל לבדיקה')}><Mail size={16}/>מייל</button><button className={state.draft?.channel==='whatsapp'?'active':''} onClick={()=>change(s=>({...s,draft:makeDraft(s,'whatsapp')}),'נוצרה טיוטת וואטסאפ לבדיקה')}><MessageCircle size={16}/>וואטסאפ</button></div>{!state.draft?<div className="cp-empty"><Mail size={32}/><strong>מכינים פנייה, לא שולחים אוטומטית.</strong><p>הטיוטה תכלול את המסמכים החסרים בתיק.</p><button className="cp-btn cp-btn-primary" onClick={()=>change(s=>({...s,draft:makeDraft(s,'email')}),'נוצרה טיוטת השלמות ללקוח')}>הכנת טיוטה ללקוח</button></div>:<><div className="cp-draft-to">{state.draft.channel==='email'?`אל: ${state.email}`:'ערוץ: WhatsApp · מספר טלפון יוגדר במערכת האמיתית'}</div><label className="cp-label">נושא<input value={state.draft.subject} onChange={e=>change(s=>({...s,draft:s.draft?{...s.draft,subject:e.target.value,state:'draft',approvedAt:undefined}:null}))}/></label><label className="cp-label">תוכן ההודעה<textarea rows={12} value={state.draft.body} onChange={e=>change(s=>({...s,draft:s.draft?{...s.draft,body:e.target.value,state:'draft',approvedAt:undefined}:null}))}/></label><div className="cp-approval-status"><Badge tone={state.draft.state==='draft'?'amber':'mint'}>{state.draft.state==='draft'?'ממתינה לאישור שלך':state.draft.state==='approved'?'אושרה במשרד':'הדמיית השליחה הושלמה'}</Badge><small>עריכת ההודעה מבטלת את האישור הקודם.</small></div><button className="cp-btn cp-btn-white cp-full" disabled={state.draft.state!=='draft'||!state.draft.body.trim()||!state.draft.subject.trim()} onClick={()=>change(s=>({...s,draft:s.draft?approvedDraft(s.draft):null}),'המשרד אישר את נוסח הפנייה בדגם')}><ShieldCheck size={17}/>בדקתי ואני מאשרת את הטיוטה</button><button className="cp-btn cp-btn-primary cp-full" disabled={state.draft.state!=='approved'} onClick={()=>{change(s=>({...s,draft:s.draft?simulateSend(s.draft):null}),'בוצעה הדמיית שליחה — לא נשלחה הודעה');setNotice('הדמיית השליחה הושלמה. לא נשלח מייל או וואטסאפ בפועל.')}}><ArrowUpLeft size={17}/>הדמיית שליחה לאחר אישור</button><button className="cp-text-btn" onClick={()=>change(s=>({...s,draft:makeDraft(s,s.draft?.channel??'email')}),'רועננה טיוטה לפי החוסרים הנוכחיים')}>רענון הטיוטה לפי החוסרים בתיק</button></>}<p className="cp-footnote">אין חיבור לספק מייל או WhatsApp בדגם. אישור זה מדגים את התהליך; במערכת האמיתית יידרשו הרשאות משרד ובקרת שרת.</p></section></div>}

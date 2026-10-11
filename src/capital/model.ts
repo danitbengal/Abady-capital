@@ -5,7 +5,7 @@ export type Section = 'property' | 'bank' | 'investments' | 'business' | 'movabl
 export type DocStatus = 'missing' | 'uploaded' | 'extracted' | 'reviewed'
 export interface CapitalLine { id: string; section: Section; label: string; owner: string; previous: number; current: number; docId: string; note: string }
 export type RoutingState = 'unassigned' | 'suggested' | 'confirmed'
-export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; form1219EntryId?: string; routingState?: RoutingState; routingNote?: string; sample: boolean }
+export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; form1219EntryId?: string; worksheetRowId?: string; routingState?: RoutingState; routingNote?: string; sample: boolean }
 export interface FlowLine { id: string; label: string; kind: 'source' | 'use'; amount: number; verified: boolean; note: string }
 export interface Draft { subject: string; body: string; channel: 'email' | 'whatsapp'; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
 export interface PersonalDetails { clientId: string; birthDate: string; maritalStatus: 'married' | 'single' | 'divorced' | 'widowed' | 'separated'; phone: string; address: string; spouseName: string; spouseId: string; spouseBirthDate: string }
@@ -49,7 +49,7 @@ export function findings(state: CapitalState) {
   if (c.gap < 0) result.push({ title: 'עודף מקורות מול השימושים', detail: `${currency(-c.gap)}: יש לבדוק נכסים או שימושים שלא נכללו.`, level: 'medium' })
   state.docs.filter(d => d.status === 'missing').forEach(d => result.push({ title: d.title, detail: 'לא התקבל מסמך תומך. יש להשלים מול הלקוח לפני סגירת התיק.', level: 'high' }))
   state.docs.filter(d => d.status === 'extracted').forEach(d => result.push({ title: `בדיקת חילוץ: ${d.title}`, detail: 'הסכום המוצע טרם אושר בידי המשרד. חילוץ הדגם הוא סימולציה.', level: 'medium' }))
-  state.docs.filter(d => d.status !== 'missing' && (!d.form1219EntryId || d.routingState === 'unassigned')).forEach(d => result.push({ title: `שיוך מסמך: ${d.fileName ?? d.title}`, detail: 'המסמך התקבל אך עדיין לא שויך לשורה בהצהרת ההון.', level: 'high' }))
+  state.docs.filter(d => d.status !== 'missing' && !d.worksheetRowId && (!d.form1219EntryId || d.routingState === 'unassigned')).forEach(d => result.push({ title: `שיוך מסמך: ${d.fileName ?? d.title}`, detail: 'המסמך התקבל אך עדיין לא שויך לשורה בהצהרת ההון.', level: 'high' }))
   state.docs.filter(d => d.status !== 'missing' && d.routingState === 'suggested').forEach(d => result.push({ title: `בדיקת מיקום: ${d.fileName ?? d.title}`, detail: 'הסוכן הציע שורה לפי שם המסמך. יש לאשר את המיקום או להעביר לשורה אחרת.', level: 'medium' }))
   const checkedRows = state.worksheet?.rows ?? state.flows
   checkedRows.filter(f => !f.verified).forEach(f => result.push({ title: `אסמכתה: ${f.label}`, detail: 'סכום נכלל בהשוואה כנתון זמני ללא אסמכתה מאושרת.', level: 'medium' }))
@@ -128,7 +128,7 @@ export function seedState(): CapitalState {
       { id: 'car-doc', title: 'מסמכי רכישה ומכירה של הרכב', category: 'רכב', status: 'missing', source: 'client', form1219EntryId: '1219-car', routingState: 'confirmed', sample: true },
       { id: 'mortgagedoc', title: 'אישור יתרת קרן משכנתה', category: 'התחייבויות', status: 'reviewed', source: 'client', fileName: 'משכנתה_דוגמה.pdf', form1219EntryId: '1219-mortgage', routingState: 'confirmed', sample: true },
       { id: 'loandoc', title: 'אישור יתרת הלוואה', category: 'התחייבויות', status: 'missing', source: 'client', form1219EntryId: '1219-loan', routingState: 'confirmed', sample: true },
-      { id: 'gift', title: 'אסמכתה למתנה מההורים', category: 'מקורות הון', status: 'missing', source: 'client', routingState: 'unassigned', sample: true },
+      { id: 'gift', title: 'אסמכתה למתנה מההורים', category: 'מקורות הון', status: 'missing', source: 'client', worksheetRowId: 'giftflow', routingState: 'confirmed', routingNote: 'משויך לשורת מתנה מההורים בהשוואת ההון.', sample: true },
     ],
     flows: [
       { id: 'income', label: 'הכנסות נטו מדווחות בתקופה', kind: 'source', amount: 1650000, verified: true, note: 'דוגמה: לאחר מסים; למנוע ניכוי כפול של המס' },
