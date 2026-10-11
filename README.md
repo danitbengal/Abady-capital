@@ -3,6 +3,7 @@
 פרויקט עצמאי של משרד עבדי בן גל, נפרד לחלוטין ממאגר `abady-crm`.
 
 תכנית המעבר מהדגם למערכת מאובטחת: [docs/production-plan-he.md](docs/production-plan-he.md).
+מיפוי טופס 1219 שסופק: [docs/form-1219-mapping-he.md](docs/form-1219-mapping-he.md).
 
 ## הפעלה
 
