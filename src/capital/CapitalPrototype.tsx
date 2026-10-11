@@ -45,7 +45,8 @@ export function CapitalPrototype() {
   const [storageError, setStorageError] = useState(false)
   const [search, setSearch] = useState('')
   const [clientLookup, setClientLookup] = useState('')
-  const [selectedProfile, setSelectedProfile] = useState('active')
+  const [selectedProfile, setSelectedProfile] = useState<string | null>(null)
+  const [pendingTab, setPendingTab] = useState<Tab>('personal')
   const [selected, setSelected] = useState('bankdoc')
   const [filter, setFilter] = useState('all')
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
@@ -96,7 +97,42 @@ export function CapitalPrototype() {
   function openClientProfile(profileId: string) {
     setSelectedProfile(profileId)
     setClientLookup('')
-    setTab('personal')
+    setTab(profileId === 'active' ? pendingTab : 'personal')
+  }
+  function openTab(target: Tab) {
+    if (target === 'clients') {
+      setSelectedProfile(null)
+      setClientLookup('')
+      setTab('clients')
+      return
+    }
+    if (target === 'clientSelect') {
+      setPendingTab('personal')
+      setSelectedProfile(null)
+      setClientLookup('')
+      setTab('clientSelect')
+      return
+    }
+    if (!selectedProfile) {
+      setPendingTab(target)
+      setClientLookup('')
+      setTab('clientSelect')
+      return
+    }
+    if (selectedProfile !== 'active' && target !== 'personal') {
+      setPendingTab(target)
+      setSelectedProfile(null)
+      setClientLookup('')
+      setTab('clientSelect')
+      return
+    }
+    setTab(target)
+  }
+  function chooseClientFor(target: Tab) {
+    setPendingTab(target)
+    setSelectedProfile(null)
+    setClientLookup('')
+    setTab('clientSelect')
   }
   function upload(id: string | null, source: 'office' | 'client') { setUploadTarget(id); setUploadSource(source); fileInput.current?.click() }
   function receive(files: FileList | null) {
@@ -173,14 +209,14 @@ export function CapitalPrototype() {
       <a className="cp-brand" href="/"><span className="cp-brandmark"><Landmark /></span><div><strong>הון<span className="cp-brand-dot">.</span></strong><small>עבדי בן גל · רואי חשבון</small></div></a>
       <div className="cp-workspace"><span className="cp-office-avatar">אב</span><div><strong>מרחב העבודה של המשרד</strong><small>הצהרות הון והשוואות</small></div><ChevronLeft size={15} /></div>
       <p className="cp-nav-label">ניהול המשרד</p>
-      <nav>{nav.map(n => <button key={n.id} className={`cp-nav-item ${tab === n.id ? 'active' : ''}`} onClick={() => setTab(n.id)}>{n.icon}<span>{n.label}</span>{n.id === 'agent' && <span className="cp-nav-dot" />}{n.id === 'documents' && <em>{missing.length}</em>}</button>)}</nav>
+      <nav>{nav.map(n => <button key={n.id} className={`cp-nav-item ${tab === n.id ? 'active' : ''}`} onClick={() => openTab(n.id)}>{n.icon}<span>{n.label}</span>{n.id === 'agent' && <span className="cp-nav-dot" />}{n.id === 'documents' && <em>{missing.length}</em>}</button>)}</nav>
       <div className="cp-sidebar-bottom"><div className="cp-demo-card"><ShieldCheck size={20} /><strong>סביבת הדגמה</strong><p>נתונים לדוגמה. אין שליחת הודעות ואין הגשה לרשות המסים.</p></div><a href="/" className="cp-back"><ArrowLeft size={15} />מרחב הצהרות ההון</a><div className="cp-user"><span>דב</span><div><strong>דנית בן גל</strong><small>תפקיד לדוגמה · מנהלת המשרד</small></div></div></div>
     </aside>
     <div className="cp-workarea">
       <header className="cp-topbar"><div>הצהרות הון <ChevronLeft size={14} /><strong>{tab === 'clients' ? 'מרכז שליטה למשרד' : `תיק · ${state.client}`}</strong></div><div className="cp-top-actions"><span className="cp-save-dot" /><small>{storageError ? 'השמירה המקומית נכשלה — הורידו גיבוי' : 'הדגם נשמר בדפדפן זה'}</small><button aria-label="הסבר על הדגם" onClick={() => setNotice('זהו דגם אינטראקטיבי. OCR, קבלת מייל/וואטסאפ ושליחה הם הדמיה. אין חיבור לנתוני CRM או למסד Supabase.')}><CircleHelp size={19} /></button></div></header>
       <main className="cp-main">
-        <div className="cp-page-heading"><div><div className="cp-eyebrow">CAPITAL WORKSPACE <span /> {title.sub}</div><h1>{title.label}</h1><p>{tab === 'clients' ? 'כל תיקי הצהרות ההון, קצב ההתקדמות והחריגים במקום אחד.' : tab === 'clientSelect' ? 'בחרי לקוח מורשה כדי לפתוח את הכרטיס שלו במסך נפרד.' : 'מהמסמך הראשון ועד לתמונה המלאה של ההון.'}</p></div>{tab !== 'clients' && tab !== 'clientSelect' && <div className="cp-heading-actions"><button className="cp-btn cp-btn-white" onClick={() => setTab('clientSelect')}><Users size={16}/>בחירת לקוח</button><button className="cp-btn cp-btn-white" onClick={() => exportFile('report')}><Download size={16} />נייר עבודה</button><button className="cp-btn cp-btn-primary" onClick={() => { setTab('documents'); upload(null, 'office') }}><Plus size={17} />צירוף מסמכים</button></div>}</div>
-        {tab !== 'clients' && tab !== 'clientSelect' && <div className="cp-case-bar"><button className="cp-return-clients" onClick={() => setTab('clients')}><Users size={15} />כל התיקים</button><button className="cp-return-clients" onClick={() => setTab('clientSelect')}><Search size={15}/>בחירת לקוח</button><span className="cp-client-avatar">דל</span><button className="cp-case-title cp-case-title-button" onClick={()=>{setSelectedProfile('active');setTab('personal')}}><strong>{state.client}</strong><small>לחצי לפתיחת כרטיס הלקוח · נתוני הדגמה</small></button><div className="cp-case-date"><small>הצהרה קודמת</small><strong>{state.previousDate.split('-').reverse().join('.')}</strong></div><ChevronLeft size={18} className="cp-date-arrow" /><div className="cp-case-date"><small>תאריך הצהרת הון</small><strong>{state.currentDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-filing-date"><small>תאריך הגשה</small><strong>{state.filingDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-work-counter"><small><Clock3 size={13}/>זמן עבודה · מודד כעת</small><strong>{workTime(state.workSeconds)}</strong></div><Badge tone="amber">בהכנה · נדרשת בדיקה</Badge></div>}
+        <div className="cp-page-heading"><div><div className="cp-eyebrow">CAPITAL WORKSPACE <span /> {title.sub}</div><h1>{title.label}</h1><p>{tab === 'clients' ? 'כל תיקי הצהרות ההון, קצב ההתקדמות והחריגים במקום אחד.' : tab === 'clientSelect' ? 'לא נבחר לקוח מראש. בחרי לקוח מורשה כדי להמשיך למסך המבוקש.' : 'מהמסמך הראשון ועד לתמונה המלאה של ההון.'}</p></div>{tab !== 'clients' && tab !== 'clientSelect' && <div className="cp-heading-actions"><button className="cp-btn cp-btn-white" onClick={() => chooseClientFor(tab)}><Users size={16}/>בחירת לקוח</button>{selectedProfile==='active'&&<><button className="cp-btn cp-btn-white" onClick={() => exportFile('report')}><Download size={16} />נייר עבודה</button><button className="cp-btn cp-btn-primary" onClick={() => { setTab('documents'); upload(null, 'office') }}><Plus size={17} />צירוף מסמכים</button></>}</div>}</div>
+        {tab !== 'clients' && tab !== 'clientSelect' && selectedProfile && <div className="cp-case-bar"><button className="cp-return-clients" onClick={() => openTab('clients')}><Users size={15} />כל התיקים</button><button className="cp-return-clients" onClick={() => chooseClientFor(tab)}><Search size={15}/>בחירת לקוח</button><span className="cp-client-avatar">{viewedProfile.client.split(' ').map(word=>word[0]).slice(0,2).join('')}</span><button className="cp-case-title cp-case-title-button" onClick={()=>setTab('personal')}><strong>{viewedProfile.client}</strong><small>הלקוח שנבחר · לחצי לפתיחת הכרטיס</small></button><div className="cp-case-date"><small>הצהרה קודמת</small><strong>{state.previousDate.split('-').reverse().join('.')}</strong></div><ChevronLeft size={18} className="cp-date-arrow" /><div className="cp-case-date"><small>תאריך הצהרת הון</small><strong>{state.currentDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-filing-date"><small>תאריך הגשה</small><strong>{state.filingDate.split('-').reverse().join('.')}</strong></div><div className="cp-case-date cp-work-counter"><small><Clock3 size={13}/>זמן עבודה · מודד כעת</small><strong>{workTime(state.workSeconds)}</strong></div><Badge tone="amber">בהכנה · נדרשת בדיקה</Badge></div>}
 
         {tab === 'clients' && <OfficeDashboard state={state} currentUser={currentUser} onOpen={(target='overview') => {setSelectedProfile('active');setTab(target)}} onNotice={setNotice} onUpdateDates={(currentDate,filingDate)=>change(s=>({...s,currentDate,filingDate}),'עודכנו תאריך הצהרת ההון ותאריך ההגשה מקליטת רשות המסים; יתר נתוני התיק נשמרו')} />}
 
