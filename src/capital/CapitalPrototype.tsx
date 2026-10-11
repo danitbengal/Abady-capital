@@ -2,11 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, ArrowUpLeft, Check, CheckCheck, ChevronLeft, CircleHelp, ClipboardList, Download, FileCheck2, FileText, FolderOpen, Landmark, LayoutDashboard, Mail, MessageCircle, Plus, ScanLine, Search, ShieldCheck, Sparkles, Upload, Users, Wallet, X } from 'lucide-react'
 import { approvedDraft, compare, currency, findings, loadState, makeDraft, sections, seedState, simulateSend, statusLabels, STORAGE_KEY, totals, type CapitalDocument, type CapitalState, type Section } from './model'
 import { AnnualWorksheet } from './AnnualWorksheet'
+import { OfficeDashboard } from './OfficeDashboard'
 import { worksheetText } from './worksheet'
 import './capital.css'
 
-type Tab = 'overview' | 'documents' | 'declaration' | 'comparison' | 'agent' | 'portal'
+type Tab = 'clients' | 'overview' | 'documents' | 'declaration' | 'comparison' | 'agent' | 'portal'
 const nav: { id: Tab; label: string; icon: ReactNode; sub: string }[] = [
+  { id: 'clients', label: 'כל תיקי ההון', icon: <Users />, sub: 'לקוחות, סטטוסים וקצב התקדמות' },
   { id: 'overview', label: 'תמונת מצב', icon: <LayoutDashboard />, sub: 'כל התיק, במקום אחד' },
   { id: 'documents', label: 'מסמכים וקריאה', icon: <FolderOpen />, sub: 'איסוף, חילוץ ובקרה' },
   { id: 'declaration', label: 'הצהרת הון', icon: <Landmark />, sub: 'נכסים והתחייבויות' },
@@ -20,7 +22,7 @@ function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: str
 
 export function CapitalPrototype() {
   const [state, setState] = useState<CapitalState>(loadState)
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useState<Tab>('clients')
   const [notice, setNotice] = useState('')
   const [storageError, setStorageError] = useState(false)
   const [search, setSearch] = useState('')
@@ -90,15 +92,17 @@ export function CapitalPrototype() {
     <aside className="cp-sidebar">
       <a className="cp-brand" href="/"><span className="cp-brandmark"><Landmark /></span><div><strong>הון<span className="cp-brand-dot">.</span></strong><small>עבדי בן גל · רואי חשבון</small></div></a>
       <div className="cp-workspace"><span className="cp-office-avatar">אב</span><div><strong>מרחב העבודה של המשרד</strong><small>הצהרות הון והשוואות</small></div><ChevronLeft size={15} /></div>
-      <p className="cp-nav-label">התיק שלי</p>
+      <p className="cp-nav-label">ניהול המשרד</p>
       <nav>{nav.map(n => <button key={n.id} className={`cp-nav-item ${tab === n.id ? 'active' : ''}`} onClick={() => setTab(n.id)}>{n.icon}<span>{n.label}</span>{n.id === 'agent' && <span className="cp-nav-dot" />}{n.id === 'documents' && <em>{missing.length}</em>}</button>)}</nav>
       <div className="cp-sidebar-bottom"><div className="cp-demo-card"><ShieldCheck size={20} /><strong>סביבת הדגמה</strong><p>נתונים לדוגמה. אין שליחת הודעות ואין הגשה לרשות המסים.</p></div><a href="/" className="cp-back"><ArrowLeft size={15} />מרחב הצהרות ההון</a><div className="cp-user"><span>דב</span><div><strong>דנית בן גל</strong><small>תפקיד לדוגמה · מנהלת המשרד</small></div></div></div>
     </aside>
     <div className="cp-workarea">
-      <header className="cp-topbar"><div>הצהרות הון <ChevronLeft size={14} /><strong>תיק לדוגמה · משפחת לוי</strong></div><div className="cp-top-actions"><span className="cp-save-dot" /><small>{storageError ? 'השמירה המקומית נכשלה — הורידו גיבוי' : 'הדגם נשמר בדפדפן זה'}</small><button aria-label="הסבר על הדגם" onClick={() => setNotice('זהו דגם אינטראקטיבי. OCR, קבלת מייל/וואטסאפ ושליחה הם הדמיה. אין חיבור לנתוני CRM או למסד Supabase.')}><CircleHelp size={19} /></button></div></header>
+      <header className="cp-topbar"><div>הצהרות הון <ChevronLeft size={14} /><strong>{tab === 'clients' ? 'מרכז שליטה למשרד' : `תיק · ${state.client}`}</strong></div><div className="cp-top-actions"><span className="cp-save-dot" /><small>{storageError ? 'השמירה המקומית נכשלה — הורידו גיבוי' : 'הדגם נשמר בדפדפן זה'}</small><button aria-label="הסבר על הדגם" onClick={() => setNotice('זהו דגם אינטראקטיבי. OCR, קבלת מייל/וואטסאפ ושליחה הם הדמיה. אין חיבור לנתוני CRM או למסד Supabase.')}><CircleHelp size={19} /></button></div></header>
       <main className="cp-main">
-        <div className="cp-page-heading"><div><div className="cp-eyebrow">CAPITAL WORKSPACE <span /> {title.sub}</div><h1>{title.label}</h1><p>מהמסמך הראשון ועד לתמונה המלאה של ההון.</p></div><div className="cp-heading-actions"><button className="cp-btn cp-btn-white" onClick={() => exportFile('report')}><Download size={16} />נייר עבודה</button><button className="cp-btn cp-btn-primary" onClick={() => { setTab('documents'); upload(null, 'office') }}><Plus size={17} />צירוף מסמכים</button></div></div>
-        <div className="cp-case-bar"><span className="cp-client-avatar">דל</span><div className="cp-case-title"><strong>{state.client}</strong><small>תיק אישי ומשפחתי · עצמאי ושכירה · נתוני הדגמה</small></div><div className="cp-case-date"><small>הצהרה קודמת</small><strong>{state.previousDate.split('-').reverse().join('.')}</strong></div><ChevronLeft size={18} className="cp-date-arrow" /><div className="cp-case-date"><small>הצהרה נוכחית</small><strong>{state.currentDate.split('-').reverse().join('.')}</strong></div><Badge tone="amber">בהכנה · נדרשת בדיקה</Badge></div>
+        <div className="cp-page-heading"><div><div className="cp-eyebrow">CAPITAL WORKSPACE <span /> {title.sub}</div><h1>{title.label}</h1><p>{tab === 'clients' ? 'כל תיקי הצהרות ההון, קצב ההתקדמות והחריגים במקום אחד.' : 'מהמסמך הראשון ועד לתמונה המלאה של ההון.'}</p></div>{tab !== 'clients' && <div className="cp-heading-actions"><button className="cp-btn cp-btn-white" onClick={() => exportFile('report')}><Download size={16} />נייר עבודה</button><button className="cp-btn cp-btn-primary" onClick={() => { setTab('documents'); upload(null, 'office') }}><Plus size={17} />צירוף מסמכים</button></div>}</div>
+        {tab !== 'clients' && <div className="cp-case-bar"><button className="cp-return-clients" onClick={() => setTab('clients')}><Users size={15} />כל התיקים</button><span className="cp-client-avatar">דל</span><div className="cp-case-title"><strong>{state.client}</strong><small>תיק אישי ומשפחתי · עצמאי ושכירה · נתוני הדגמה</small></div><div className="cp-case-date"><small>הצהרה קודמת</small><strong>{state.previousDate.split('-').reverse().join('.')}</strong></div><ChevronLeft size={18} className="cp-date-arrow" /><div className="cp-case-date"><small>הצהרה נוכחית</small><strong>{state.currentDate.split('-').reverse().join('.')}</strong></div><Badge tone="amber">בהכנה · נדרשת בדיקה</Badge></div>}
+
+        {tab === 'clients' && <OfficeDashboard state={state} onOpen={() => setTab('overview')} onNotice={setNotice} />}
 
         {state.worksheet?.capitalSource === 'imported-summary' && tab !== 'comparison' && <div className="cp-info"><FileText size={18}/><div><strong>השוואת ההון משתמשת בסיכומים ממסמך חיצוני.</strong><p>תאריכי ההשוואה: {state.worksheet.previousDate} — {state.worksheet.currentDate}. פירוט ההצהרה והמסמכים לדוגמה לא הוחלפו בסיכומי הצילום.</p></div></div>}
 
