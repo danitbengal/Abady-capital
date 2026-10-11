@@ -33,6 +33,11 @@ describe('capital reconciliation', () => {
     state.currentDate = '2019-12-31'
     expect(findings(state).some(i => i.title === 'סדר תאריכים שגוי')).toBe(true)
   })
+  it('flags a filing date before the declaration date', () => {
+    const state = seedState()
+    state.filingDate = '2025-01-01'
+    expect(findings(state).some(i => i.title === 'תאריך הגשה מוקדם מתאריך ההצהרה')).toBe(true)
+  })
 })
 
 describe('client correspondence approval', () => {

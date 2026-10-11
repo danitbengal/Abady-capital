@@ -6,7 +6,7 @@ export interface CapitalLine { id: string; section: Section; label: string; owne
 export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; sample: boolean }
 export interface FlowLine { id: string; label: string; kind: 'source' | 'use'; amount: number; verified: boolean; note: string }
 export interface Draft { subject: string; body: string; channel: 'email' | 'whatsapp'; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
-export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
+export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; filingDate: string; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
 export const sections: Record<Section, string> = { property: 'נדל״ן', bank: 'בנקים ומזומנים', investments: 'חסכונות והשקעות', business: 'נכסים בעסק', movables: 'רכב ותכולה', liability: 'התחייבויות' }
 export const statusLabels: Record<DocStatus, string> = { missing: 'חסר', uploaded: 'ממתין לקריאה', extracted: 'ממתין לבדיקה', reviewed: 'נבדק ואושר' }
 export const currency = (n: number) => new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n)
@@ -46,6 +46,7 @@ export function findings(state: CapitalState) {
   const checkedRows = state.worksheet?.rows ?? state.flows
   checkedRows.filter(f => !f.verified).forEach(f => result.push({ title: `אסמכתה: ${f.label}`, detail: 'סכום נכלל בהשוואה כנתון זמני ללא אסמכתה מאושרת.', level: 'medium' }))
   if (state.currentDate <= state.previousDate) result.push({ title: 'סדר תאריכים שגוי', detail: 'תאריך ההצהרה הנוכחית חייב להיות מאוחר מקודמתה.', level: 'high' })
+  if (state.filingDate && state.filingDate < state.currentDate) result.push({ title: 'תאריך הגשה מוקדם מתאריך ההצהרה', detail: 'יש לבדוק את תאריך ההצהרה ואת תאריך ההגשה לפני סגירת התיק.', level: 'high' })
   result.push({ title: 'בסיס מדידה ואימות טופס', detail: 'הסכומים בדגם על בסיס עלות מדווחת; אין החלפה אוטומטית בשווי שוק. יש לאמת את מיפוי סעיפי טופס 1219 ואת כללי הדיווח לפני הגשה.', level: 'info' })
   return result
 }
@@ -59,7 +60,7 @@ export function simulateSend(draft: Draft): Draft {
   return { ...draft, state: 'simulated' }
 }
 export function seedState(): CapitalState {
-  return { version: 1, client: 'דניאל ומאיה לוי', email: 'client@example.com', previousDate: '2020-12-31', currentDate: '2025-12-31',
+  return { version: 1, client: 'דניאל ומאיה לוי', email: 'client@example.com', previousDate: '2020-12-31', currentDate: '2025-12-31', filingDate: '2026-12-31',
     lines: [
       { id: 'home', section: 'property', label: 'דירת מגורים · תל אביב', owner: 'בני הזוג', previous: 1850000, current: 1850000, docId: 'deed', note: 'עלות רכישה מדווחת; לא שווי שוק' },
       { id: 'bank', section: 'bank', label: 'חשבון עו״ש · בנק לדוגמה', owner: 'דניאל לוי', previous: 85000, current: 165000, docId: 'bankdoc', note: 'יתרה ליום ההצהרה' },
@@ -88,7 +89,7 @@ export function seedState(): CapitalState {
 }
 export const STORAGE_KEY = 'abady-capital-prototype-v1'
 export function loadState(): CapitalState {
-  try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'); if (s?.version === 1 && Array.isArray(s.lines) && Array.isArray(s.docs) && Array.isArray(s.flows)) return s } catch { /* fall back to demo */ }
+  try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'); if (s?.version === 1 && Array.isArray(s.lines) && Array.isArray(s.docs) && Array.isArray(s.flows)) return { ...s, filingDate: s.filingDate ?? '2026-12-31' } } catch { /* fall back to demo */ }
   return seedState()
 }
 
