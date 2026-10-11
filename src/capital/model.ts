@@ -1,10 +1,12 @@
+import { comparisonYears, reconcileWorksheet, type Worksheet } from './worksheet'
+
 export type Section = 'property' | 'bank' | 'investments' | 'business' | 'movables' | 'liability'
 export type DocStatus = 'missing' | 'uploaded' | 'extracted' | 'reviewed'
 export interface CapitalLine { id: string; section: Section; label: string; owner: string; previous: number; current: number; docId: string; note: string }
 export interface CapitalDocument { id: string; title: string; category: string; status: DocStatus; source: 'office' | 'client'; fileName?: string; confidence?: number; extracted?: number; targetId?: string; sample: boolean }
 export interface FlowLine { id: string; label: string; kind: 'source' | 'use'; amount: number; verified: boolean; note: string }
 export interface Draft { subject: string; body: string; channel: 'email' | 'whatsapp'; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
-export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; draft: Draft | null; log: string[] }
+export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
 export const sections: Record<Section, string> = { property: 'נדל״ן', bank: 'בנקים ומזומנים', investments: 'חסכונות והשקעות', business: 'נכסים בעסק', movables: 'רכב ותכולה', liability: 'התחייבויות' }
 export const statusLabels: Record<DocStatus, string> = { missing: 'חסר', uploaded: 'ממתין לקריאה', extracted: 'ממתין לבדיקה', reviewed: 'נבדק ואושר' }
 export const currency = (n: number) => new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n)
@@ -15,8 +17,12 @@ export function totals(lines: CapitalLine[]) {
   const previousNet = previousAssets - previousLiabilities, currentNet = currentAssets - currentLiabilities
   return { previousAssets, currentAssets, previousLiabilities, currentLiabilities, previousNet, currentNet, growth: currentNet - previousNet }
 }
-export function compare(state: Pick<CapitalState, 'lines' | 'flows'>) {
+export function compare(state: Pick<CapitalState, 'lines' | 'flows' | 'worksheet'>) {
   const t = totals(state.lines)
+  if (state.worksheet) {
+    const w = reconcileWorksheet(state.worksheet, t)
+    return { ...t, ...w, uses: w.uses + w.living, available: w.sources - w.uses - w.living }
+  }
   const sources = state.flows.filter(f => f.kind === 'source').reduce((a, f) => a + f.amount, 0)
   const uses = state.flows.filter(f => f.kind === 'use').reduce((a, f) => a + f.amount, 0)
   return { ...t, sources, uses, available: sources - uses, gap: t.growth + uses - sources }
@@ -24,11 +30,21 @@ export function compare(state: Pick<CapitalState, 'lines' | 'flows'>) {
 export function findings(state: CapitalState) {
   const result: { title: string; detail: string; level: 'high' | 'medium' | 'info' }[] = []
   const c = compare(state)
+  if (state.worksheet?.capitalSource === 'imported-summary') result.push({ title: 'סיכומי הון מצילום — ללא פירוט נכסים', detail: 'ההשוואה משתמשת בסיכומים שהוזנו מהמסמך, ולא בשורות ההצהרה שבדגם. יש להתאים לסיכומי ההצהרות המלאות לפני סגירת התיק.', level: 'medium' })
+  if (state.worksheet && !state.worksheet.livingVerified) result.push({ title: 'אומדן הוצאות מחיה לא אושר', detail: 'היתרה למחיה אינה עודף סופי לפני בדיקת הוצאות המחיה. גם סכום אפס טעון הסבר ואישור.', level: 'high' })
+  if (state.worksheet) {
+    const years = comparisonYears(state.worksheet.previousDate, state.worksheet.currentDate)
+    if (!years.length) result.push({ title: 'תקופת ההשוואה אינה תקינה', detail: 'יש לתקן תאריכים או תקופה ארוכה מ־50 שנים לפני אישור נייר העבודה.', level: 'high' })
+    const outside = state.worksheet.rows.some(r => Object.entries(r.values).some(([y, n]) => n !== 0 && !years.includes(Number(y)))) || Object.entries(state.worksheet.living).some(([y, n]) => n !== 0 && !years.includes(Number(y)))
+    if (outside) result.push({ title: 'סכומים משויכים לשנים מחוץ לתקופה', detail: 'הסכומים נשמרו בחישוב אך נדרשת בדיקת שיוך לפני אישור.', level: 'high' })
+    if (state.worksheet.rows.some(r => r.unallocated !== 0) || state.worksheet.livingUnallocated !== 0) result.push({ title: 'סכומים ללא שיוך לשנת מס', detail: 'הסכומים התקופתיים נשמרו במלואם; יש להשלים פיזור לפי אסמכתאות ולא באופן אוטומטי.', level: 'medium' })
+  }
   if (c.gap > 0) result.push({ title: 'גידול הון שטרם הוסבר', detail: `${currency(c.gap)}: יש לבדוק מקורות נוספים, הוצאות והשוואת בסיסי המדידה.`, level: 'high' })
   if (c.gap < 0) result.push({ title: 'עודף מקורות מול השימושים', detail: `${currency(-c.gap)}: יש לבדוק נכסים או שימושים שלא נכללו.`, level: 'medium' })
   state.docs.filter(d => d.status === 'missing').forEach(d => result.push({ title: d.title, detail: 'לא התקבל מסמך תומך. יש להשלים מול הלקוח לפני סגירת התיק.', level: 'high' }))
   state.docs.filter(d => d.status === 'extracted').forEach(d => result.push({ title: `בדיקת חילוץ: ${d.title}`, detail: 'הסכום המוצע טרם אושר בידי המשרד. חילוץ הדגם הוא סימולציה.', level: 'medium' }))
-  state.flows.filter(f => !f.verified).forEach(f => result.push({ title: `אסמכתה: ${f.label}`, detail: 'סכום נכלל בהשוואה כנתון זמני ללא אסמכתה מאושרת.', level: 'medium' }))
+  const checkedRows = state.worksheet?.rows ?? state.flows
+  checkedRows.filter(f => !f.verified).forEach(f => result.push({ title: `אסמכתה: ${f.label}`, detail: 'סכום נכלל בהשוואה כנתון זמני ללא אסמכתה מאושרת.', level: 'medium' }))
   if (state.currentDate <= state.previousDate) result.push({ title: 'סדר תאריכים שגוי', detail: 'תאריך ההצהרה הנוכחית חייב להיות מאוחר מקודמתה.', level: 'high' })
   result.push({ title: 'בסיס מדידה ואימות טופס', detail: 'הסכומים בדגם על בסיס עלות מדווחת; אין החלפה אוטומטית בשווי שוק. יש לאמת את מיפוי סעיפי טופס 1219 ואת כללי הדיווח לפני הגשה.', level: 'info' })
   return result
@@ -75,3 +91,4 @@ export function loadState(): CapitalState {
   try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'); if (s?.version === 1 && Array.isArray(s.lines) && Array.isArray(s.docs) && Array.isArray(s.flows)) return s } catch { /* fall back to demo */ }
   return seedState()
 }
+
