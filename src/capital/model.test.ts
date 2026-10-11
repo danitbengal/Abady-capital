@@ -38,6 +38,14 @@ describe('capital reconciliation', () => {
     state.filingDate = '2025-01-01'
     expect(findings(state).some(i => i.title === 'תאריך הגשה מוקדם מתאריך ההצהרה')).toBe(true)
   })
+  it('flags missing personal details, children details and selected annexes', () => {
+    const state = seedState()
+    state.personal.clientId = ''
+    state.children[0].birthDate = ''
+    expect(findings(state).some(i => i.title === 'פרטים אישיים חסרים')).toBe(true)
+    expect(findings(state).some(i => i.title === 'פרטי ילדים אינם מלאים')).toBe(true)
+    expect(findings(state).some(i => i.title === 'נספחים שסומנו ועדיין חסרים')).toBe(true)
+  })
 })
 
 describe('client correspondence approval', () => {
