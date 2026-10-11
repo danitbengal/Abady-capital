@@ -27,10 +27,9 @@ const stageLabel: Record<Stage, string> = {
 const stageTone: Record<Stage, string> = { waiting: 'amber', documents: 'blue', review: 'blue', comparison: 'mint', approval: 'amber', complete: 'mint' }
 const displayDate = (value: string) => value.split('-').reverse().join('.')
 
-const importPreview = [
+const newTaxCases = [
   { id: 'tax-1', client: 'יעל ואמיר ברק', identifier: 'תיק 11241', declarationDate: '2025-12-31', filingDate: '2026-12-15', duplicate: false },
   { id: 'tax-2', client: 'משפחת שלו', identifier: 'תיק 11256', declarationDate: '2024-12-31', filingDate: '2026-11-30', duplicate: false },
-  { id: 'tax-3', client: 'דניאל ומאיה לוי', identifier: 'תיק 10482', declarationDate: '2025-12-31', filingDate: '2026-12-31', duplicate: true },
 ]
 
 function demoCases(state: CapitalState): PortfolioCase[] {
@@ -47,7 +46,7 @@ function demoCases(state: CapitalState): PortfolioCase[] {
   ]
 }
 
-export function OfficeDashboard({ state, onOpen, onNotice }: { state: CapitalState; onOpen: (target?: 'overview' | 'personal') => void; onNotice: (message: string) => void }) {
+export function OfficeDashboard({ state, onOpen, onNotice, onUpdateDates }: { state: CapitalState; onOpen: (target?: 'overview' | 'personal') => void; onNotice: (message: string) => void; onUpdateDates: (declarationDate: string, filingDate: string) => void }) {
   const [importedCases, setImportedCases] = useState<PortfolioCase[]>([])
   const [pdfName, setPdfName] = useState('')
   const importInput = useRef<HTMLInputElement>(null)
@@ -55,6 +54,7 @@ export function OfficeDashboard({ state, onOpen, onNotice }: { state: CapitalSta
   const [query, setQuery] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [managerFilter, setManagerFilter] = useState('all')
+  const taxPreviewRows = [...newTaxCases, { id: 'tax-existing', client: state.client, identifier: 'תיק 10482', declarationDate: '2026-12-31', filingDate: '2027-03-31', duplicate: true }]
   const visible = cases.filter(c => `${c.client} ${c.identifier} ${c.manager}`.toLowerCase().includes(query.trim().toLowerCase()) && (stageFilter === 'all' || c.stage === stageFilter) && (managerFilter === 'all' || c.manager === managerFilter))
   const overdue = cases.filter(c => new Date(c.filingDate) < new Date('2026-10-11') && c.stage !== 'complete').length
   const waiting = cases.filter(c => c.stage === 'waiting' || c.daysWaiting >= 7).length
@@ -70,13 +70,15 @@ export function OfficeDashboard({ state, onOpen, onNotice }: { state: CapitalSta
     setPdfName(file.name)
   }
   function approveImport() {
-    const additions: PortfolioCase[] = importPreview.filter(row => !row.duplicate).map((row, index) => ({
+    const additions: PortfolioCase[] = taxPreviewRows.filter(row => !row.duplicate).map((row, index) => ({
       ...row, manager: 'טרם שויך', stage: 'waiting', progress: 0, received: 0, required: 12, missing: 12,
       daysWaiting: 0, lastActivity: 'עכשיו · נקלט מרשימת רשות המסים (הדמיה)', id: `import-${Date.now()}-${index}`,
     }))
-    setImportedCases(current => [...current, ...additions])
+    setImportedCases(current => current.length ? current : additions)
+    const existingClient = taxPreviewRows.find(row => row.duplicate)
+    if (existingClient) onUpdateDates(existingClient.declarationDate, existingClient.filingDate)
     setPdfName('')
-    onNotice('נקלטו 2 תיקי הדגמה. הרשומה הכפולה לא נקלטה.')
+    onNotice('נקלטו 2 תיקים חדשים ועודכנו רק מועדי ההצהרה וההגשה של הלקוח הקיים. כל המסמכים ונתוני התיק נשמרו ללא שינוי.')
   }
   return <>
     <input ref={importInput} hidden type="file" accept="application/pdf,.pdf" onChange={receiveTaxList} />
@@ -89,9 +91,9 @@ export function OfficeDashboard({ state, onOpen, onNotice }: { state: CapitalSta
     </div>
     {pdfName && <section className="cp-panel cp-import-panel" aria-label="תצוגה מקדימה לקליטת PDF מרשות המסים">
       <div className="cp-panel-head"><div><h2>קליטת רשימה מרשות המסים</h2><p>{pdfName}</p></div><button className="cp-icon-close" aria-label="ביטול קליטה" onClick={() => setPdfName('')}><X size={18} /></button></div>
-      <div className="cp-import-warning"><FileText size={20} /><div><strong>הדמיית OCR בדגם</strong><p>תוכן הקובץ לא נקרא ולא נשמר. הרשומות שלמטה נועדו להמחיש חילוץ, בדיקת כפילויות ואישור לפני קליטה.</p></div></div>
-      <div className="cp-table-wrap"><table className="cp-table cp-import-table"><thead><tr><th>לקוח</th><th>מספר תיק</th><th>תאריך הצהרת הון</th><th>תאריך הגשה</th><th>תוצאת בדיקה</th></tr></thead><tbody>{importPreview.map(row => <tr key={row.id}><td><strong>{row.client}</strong></td><td>{row.identifier}</td><td>{displayDate(row.declarationDate)}</td><td>{displayDate(row.filingDate)}</td><td><span className={`cp-badge cp-${row.duplicate ? 'amber' : 'mint'}`}>{row.duplicate ? 'כפילות — לא ייקלט' : 'מוכן לקליטה'}</span></td></tr>)}</tbody></table></div>
-      <div className="cp-import-actions"><span>2 תיקים חדשים · כפילות אחת</span><button className="cp-btn cp-btn-white" onClick={() => setPdfName('')}>ביטול</button><button className="cp-btn cp-btn-primary" onClick={approveImport}><CheckCircle2 size={16} />אישור קליטת 2 תיקים</button></div>
+      <div className="cp-import-warning"><FileText size={20} /><div><strong>הדמיית OCR בדגם</strong><p>תוכן הקובץ לא נקרא ולא נשמר. לקוח קיים יקבל רק את תאריך הצהרת ההון ותאריך ההגשה החדשים; המסמכים וכל יתר נתוני התיק יישמרו ללא שינוי.</p></div></div>
+      <div className="cp-table-wrap"><table className="cp-table cp-import-table"><thead><tr><th>לקוח</th><th>מספר תיק</th><th>תאריך הצהרת הון</th><th>תאריך הגשה</th><th>פעולה לאחר אישור</th></tr></thead><tbody>{taxPreviewRows.map(row => <tr key={row.id}><td><strong>{row.client}</strong></td><td>{row.identifier}</td><td>{displayDate(row.declarationDate)}</td><td>{displayDate(row.filingDate)}</td><td><span className={`cp-badge cp-${row.duplicate ? 'blue' : 'mint'}`}>{row.duplicate ? 'לקוח קיים — עדכון תאריכים בלבד' : 'פתיחת תיק חדש'}</span></td></tr>)}</tbody></table></div>
+      <div className="cp-import-actions"><span>2 תיקים חדשים · עדכון מועדים ללקוח קיים אחד</span><button className="cp-btn cp-btn-white" onClick={() => setPdfName('')}>ביטול</button><button className="cp-btn cp-btn-primary" onClick={approveImport}><CheckCircle2 size={16} />אישור קליטה ועדכון מועדים</button></div>
     </section>}
     <section className="cp-panel cp-portfolio-panel">
       <div className="cp-panel-head"><div><h2>תיקי הצהרות ההון</h2><p>מעקב מרוכז אחר איסוף, בדיקה, השוואה ואישור</p></div><div className="cp-panel-actions"><button className="cp-btn cp-btn-white" onClick={() => importInput.current?.click()}><Upload size={16} />קליטת רשימה מרשות המסים · PDF</button><button className="cp-btn cp-btn-primary" onClick={() => onNotice('פתיחת תיק חדש תתווסף במערכת האמיתית. בדגם קיים תיק פעיל אחד לעריכה וחמישה תיקי מעקב לדוגמה.')}><span>+</span>תיק חדש</button></div></div>
