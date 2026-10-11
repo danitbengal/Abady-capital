@@ -2,6 +2,8 @@
 
 פרויקט עצמאי של משרד עבדי בן גל, נפרד לחלוטין ממאגר `abady-crm`.
 
+תכנית המעבר מהדגם למערכת מאובטחת: [docs/production-plan-he.md](docs/production-plan-he.md).
+
 ## הפעלה
 
 Node 24 ו־npm 11 נבדקו בסביבה.
