@@ -4,6 +4,7 @@ import { Building2, FolderLock, LogIn, LogOut, ShieldCheck } from 'lucide-react'
 import { capitalSupabase, isCapitalSupabaseConfigured } from '../lib/supabase'
 import './production.css'
 import { SecureWorkspace, type ClientRow } from './SecureWorkspace'
+import { authFailureMessage,authFailureReference } from './authErrors'
 
 type Membership = { office_id: string; role: string; offices?: { name?: string } | null }
 
@@ -20,6 +21,7 @@ export function ProductionGateway() {
   const [authBusy, setAuthBusy] = useState(false)
   const [resendSeconds, setResendSeconds] = useState(0)
   const [message, setMessage] = useState('')
+  const [authReference,setAuthReference]=useState('')
   const [membership, setMembership] = useState<Membership | null>(null)
   const [workspaceError, setWorkspaceError] = useState(false)
   const [clients, setClients] = useState<ClientRow[]>([])
@@ -66,12 +68,12 @@ export function ProductionGateway() {
     event?.preventDefault()
     if (!capitalSupabase || authBusy || resendSeconds) return
     const recipient = codeEmail || email.trim()
-    setAuthBusy(true); setMessage('')
+    setAuthBusy(true); setMessage(''); setAuthReference('')
     try {
       const { error } = await capitalSupabase.auth.signInWithOtp({ email: recipient, options: { shouldCreateUser: false } })
-      if (error) { setMessage('לא ניתן לשלוח קוד כרגע. בדקי את המייל או נסי שוב מאוחר יותר.'); return }
+      if (error) { setMessage(authFailureMessage(error));setAuthReference(authFailureReference(error));if(error.status===429)setResendSeconds(60);return }
       setCodeEmail(recipient); setCode(''); setResendSeconds(60)
-    } catch { setMessage('החיבור נכשל. נסי שוב.') }
+    } catch { setMessage('לא ניתן להגיע לשירות ההתחברות. בדקי חיבור לאינטרנט ונסי שוב.');setAuthReference('network_error') }
     finally { setAuthBusy(false) }
   }
 
@@ -100,7 +102,7 @@ export function ProductionGateway() {
   if (!isCapitalSupabaseConfigured) return <SecureMessage title="החיבור אינו מוגדר" text="יש להגדיר את כתובת פרויקט ההון ואת המפתח הציבורי בסביבת ההפעלה." />
   if (loading) return <SecureMessage title="טוענים את סביבת המשרד" text="מתבצעת בדיקת התחברות והרשאות…" />
 
-  if (!session) return <div className="prod-shell" dir="rtl"><section className="prod-login"><div className="prod-mark"><FolderLock /></div><small>מערכת הצהרות הון · קוד חד־פעמי במייל</small><h1>כניסה למשרד</h1>{!codeEmail ? <><p>הזיני את המייל של משתמש המשרד שלך כדי לקבל קוד כניסה.</p><form onSubmit={sendCode}><label>כתובת מייל<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required disabled={authBusy}/></label><button type="submit" disabled={authBusy || resendSeconds > 0}><LogIn size={17}/>{authBusy ? 'שולחים קוד…' : resendSeconds > 0 ? `אפשר לבקש שוב בעוד ${resendSeconds} שניות` : 'שליחת קוד למייל'}</button></form></> : <><p>בקשת קוד נשלחה עבור <b dir="ltr">{codeEmail}</b>. בדקי גם את תיקיית הספאם.</p><form onSubmit={verifyCode}><label>קוד כניסה<input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} required autoFocus disabled={authBusy}/></label><button type="submit" disabled={authBusy}><LogIn size={17}/>{authBusy ? 'בודקים קוד…' : 'אימות קוד וכניסה'}</button></form><button className="prod-link" disabled={authBusy || resendSeconds > 0} onClick={() => void sendCode()}>{resendSeconds ? `שליחה חוזרת בעוד ${resendSeconds} שניות` : 'שליחת קוד חדש'}</button><button className="prod-link" disabled={authBusy} onClick={() => { setCodeEmail(''); setCode(''); setMessage('') }}>שינוי כתובת מייל</button></>}{message && <div role="alert" className="prod-error">{message}</div>}<a href="?">חזרה לדגם</a></section></div>
+  if (!session) return <div className="prod-shell" dir="rtl"><section className="prod-login"><div className="prod-mark"><FolderLock /></div><small>מערכת הצהרות הון · קוד חד־פעמי במייל</small><h1>כניסה למשרד</h1>{!codeEmail ? <><p>הזיני את המייל של משתמש המשרד שלך כדי לקבל קוד כניסה.</p><form onSubmit={sendCode}><label>כתובת מייל<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required disabled={authBusy}/></label><button type="submit" disabled={authBusy || resendSeconds > 0}><LogIn size={17}/>{authBusy ? 'שולחים קוד…' : resendSeconds > 0 ? `אפשר לבקש שוב בעוד ${resendSeconds} שניות` : 'שליחת קוד למייל'}</button></form></> : <><p>בקשת קוד נשלחה עבור <b dir="ltr">{codeEmail}</b>. בדקי גם את תיקיית הספאם.</p><form onSubmit={verifyCode}><label>קוד כניסה<input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" minLength={6} maxLength={10} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} required autoFocus disabled={authBusy}/></label><button type="submit" disabled={authBusy}><LogIn size={17}/>{authBusy ? 'בודקים קוד…' : 'אימות קוד וכניסה'}</button></form><button className="prod-link" disabled={authBusy || resendSeconds > 0} onClick={() => void sendCode()}>{resendSeconds ? `שליחה חוזרת בעוד ${resendSeconds} שניות` : 'שליחת קוד חדש'}</button><button className="prod-link" disabled={authBusy} onClick={() => { setCodeEmail(''); setCode(''); setMessage(''); setAuthReference('') }}>שינוי כתובת מייל</button></>}{message && <div role="alert" className="prod-error">{message}{authReference && <details><summary>פרטי התקלה לבדיקה</summary><code dir="ltr">{authReference}</code></details>}</div>}<a href="?">חזרה לדגם</a></section></div>
 
   if (workspaceError) return <div className="prod-shell" dir="rtl"><section className="prod-login"><h1>סביבת המשרד עדיין אינה זמינה</h1><p>{message}</p><button className="prod-link" onClick={() => void loadWorkspace()}>בדיקה מחדש</button><button className="prod-link" onClick={() => capitalSupabase?.auth.signOut()}>התנתקות</button></section></div>
 
