@@ -9,6 +9,7 @@ import { canAccessClient, type OfficeUser } from './access'
 import { inferForm1219Entry } from './documentRouting'
 import { approveAllDocumentProposals, approveDocumentProposal, setDocumentAmount, setDocumentDestination } from './documentApproval'
 import { DocumentAgentQueue } from './DocumentAgentQueue'
+import { TaxApiPanel } from '../tax-api/TaxApiPanel'
 import './capital.css'
 import './client-access.css'
 import './client-select.css'
@@ -90,7 +91,7 @@ export function CapitalPrototype() {
     setState(s => {
       const next = update(s)
       if (next.worksheet?.capitalSource === 'declaration' && (next.currentDate !== s.currentDate || next.previousDate !== s.previousDate)) next.worksheet = { ...next.worksheet, previousDate: next.previousDate, currentDate: next.currentDate }
-      const dataChanged = next.lines !== s.lines || next.form1219Entries !== s.form1219Entries || next.form1219SharePercent !== s.form1219SharePercent || next.form1219Disclosures !== s.form1219Disclosures || next.docs !== s.docs || next.flows !== s.flows || next.worksheet !== s.worksheet || next.currentDate !== s.currentDate || next.previousDate !== s.previousDate || next.filingDate !== s.filingDate || next.personal !== s.personal || next.children !== s.children || next.officeNotes !== s.officeNotes || next.annexes !== s.annexes
+      const dataChanged = next.taxApi !== s.taxApi || next.lines !== s.lines || next.form1219Entries !== s.form1219Entries || next.form1219SharePercent !== s.form1219SharePercent || next.form1219Disclosures !== s.form1219Disclosures || next.docs !== s.docs || next.flows !== s.flows || next.worksheet !== s.worksheet || next.currentDate !== s.currentDate || next.previousDate !== s.previousDate || next.filingDate !== s.filingDate || next.personal !== s.personal || next.children !== s.children || next.officeNotes !== s.officeNotes || next.annexes !== s.annexes
       const draft = dataChanged && next.draft ? { ...next.draft, state: 'draft' as const, approvedAt: undefined } : next.draft
       const signature = dataChanged && next.signature.state !== 'draft' ? { ...next.signature, state: 'draft' as const, approvedAt: undefined } : next.signature
       return { ...next, draft, signature, log: event ? [`${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })} • ${event}`, ...s.log].slice(0, 40) : next.log }
@@ -266,6 +267,7 @@ export function CapitalPrototype() {
           <p className="cp-footnote">בדגם אין OCR אמיתי. החילוץ זמין רק לאישור הבנק ולמאזן הבוחן לדוגמה; תוצאה טעונה אישור ולא מחליפה ביקורת.</p></>}</section></div>}
 
         {tab === 'declaration' && <>
+          <TaxApiPanel state={state} onChange={change}/>
           <OfficialDeclaration1219 state={state} onChange={change} onOpenDocument={documentId=>{setSelected(documentId);setTab('documents')}}/>
           <section className="cp-panel cp-details"><div className="cp-panel-head"><div><h2>נספחים ואישורים לצירוף</h2><p>סמני מה נדרש לחבילת הלקוח ומה כבר מוכן</p></div><Badge>{state.annexes.filter(a=>a.selected).length} נבחרו</Badge></div><div className="cp-annex-list">{state.annexes.map(item=><div className="cp-annex-row" key={item.id}><label><input type="checkbox" checked={item.selected} onChange={e=>change(s=>({...s,annexes:s.annexes.map(a=>a.id===item.id?{...a,selected:e.target.checked}:a)}))}/><span><strong>{item.label}</strong><small>{item.selected?'לצרף לחבילת החתימה':'לא סומן לצירוף'}</small></span></label><label className="cp-annex-included"><input type="checkbox" checked={item.included} disabled={!item.selected} onChange={e=>change(s=>({...s,annexes:s.annexes.map(a=>a.id===item.id?{...a,included:e.target.checked}:a)}))}/>{item.included?'מוכן בחבילה':'עדיין חסר'}</label></div>)}</div><p className="cp-footnote">זוהי רשימת עבודה בדגם. יש להתאים אותה לטופס הרשמי העדכני ולנסיבות הלקוח לפני שליחה.</p></section>
           <section className="cp-panel cp-details cp-final-notes"><div className="cp-panel-head"><div><h2>הערות בסוף הקובץ</h2><p>הטקסט ייכלל בסוף חבילת ההצהרה שתועבר ללקוח</p></div><FileText size={21}/></div><label className="cp-label">הערות המשרד<textarea rows={5} value={state.officeNotes} placeholder="הערות, הסתייגויות או הנחיות ללקוח…" onChange={e=>change(s=>({...s,officeNotes:e.target.value}))}/></label></section>

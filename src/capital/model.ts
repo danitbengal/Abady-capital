@@ -1,5 +1,6 @@
 import { comparisonYears, reconcileWorksheet, type Worksheet } from './worksheet'
 import type { Form1219Disclosures, Form1219Entry } from './form1219'
+import type { TaxApiDraft } from '../tax-api/payload'
 
 export type Section = 'property' | 'bank' | 'investments' | 'business' | 'movables' | 'liability'
 export type DocStatus = 'missing' | 'uploaded' | 'extracted' | 'reviewed'
@@ -12,7 +13,7 @@ export interface PersonalDetails { clientId: string; birthDate: string; maritalS
 export interface ChildDetails { id: string; name: string; identityNumber: string; birthDate: string }
 export interface AnnexItem { id: string; label: string; selected: boolean; included: boolean }
 export interface SignaturePackage { acknowledgementFileName: string; state: 'draft' | 'approved' | 'simulated'; approvedAt?: string }
-export interface CapitalState { version: 1; client: string; email: string; previousDate: string; currentDate: string; filingDate: string; workSeconds: number; personal: PersonalDetails; children: ChildDetails[]; officeNotes: string; annexes: AnnexItem[]; signature: SignaturePackage; form1219Entries: Form1219Entry[]; form1219SharePercent: number; form1219Disclosures: Form1219Disclosures; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
+export interface CapitalState { taxApi?: TaxApiDraft; version: 1; client: string; email: string; previousDate: string; currentDate: string; filingDate: string; workSeconds: number; personal: PersonalDetails; children: ChildDetails[]; officeNotes: string; annexes: AnnexItem[]; signature: SignaturePackage; form1219Entries: Form1219Entry[]; form1219SharePercent: number; form1219Disclosures: Form1219Disclosures; lines: CapitalLine[]; docs: CapitalDocument[]; flows: FlowLine[]; worksheet?: Worksheet; draft: Draft | null; log: string[] }
 export const sections: Record<Section, string> = { property: 'נדל״ן', bank: 'בנקים ומזומנים', investments: 'חסכונות והשקעות', business: 'נכסים בעסק', movables: 'רכב ותכולה', liability: 'התחייבויות' }
 export const statusLabels: Record<DocStatus, string> = { missing: 'חסר', uploaded: 'ממתין לקריאה', extracted: 'ממתין לבדיקה', reviewed: 'נבדק ואושר' }
 export const currency = (n: number) => new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n)

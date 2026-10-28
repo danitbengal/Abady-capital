@@ -5,6 +5,7 @@
 תכנית המעבר מהדגם למערכת מאובטחת: [docs/production-plan-he.md](docs/production-plan-he.md).
 מיפוי טופס 1219 שסופק: [docs/form-1219-mapping-he.md](docs/form-1219-mapping-he.md).
 נקודת ההתחלה למערכת האמיתית: [docs/phase-1-secure-core-he.md](docs/phase-1-secure-core-he.md).
+התאמה למפרט שידור רשות המסים: [docs/tax-authority-api-he.md](docs/tax-authority-api-he.md).
 
 ## הפעלה
 

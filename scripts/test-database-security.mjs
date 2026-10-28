@@ -16,7 +16,7 @@ async function denied(user, sql) {
 }
 try {
   await db.exec(`
-    create role authenticated;
+    create role authenticated; create role anon; create role service_role;
     create schema auth; create schema storage;
     create table auth.users(id uuid primary key, raw_user_meta_data jsonb default '{}');
     create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
@@ -67,5 +67,29 @@ try {
   assert.ok((await asUser(1,'select * from public.audit_events')).rows.length>=3); checks++
   await asUser(2, `update public.capital_cases set filing_due_date='2027-01-01' where id='${id(30)}'`)
   assert.equal((await asUser(2,'select * from public.documents')).rows.length,1); checks++
-  console.log(`Database migration executed; ${checks} authorization, storage, approval, audit and date-preservation checks passed.`)
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261028000100_tax_api_submissions.sql', import.meta.url), 'utf8'))
+  await asUser(1, `update public.clients set tax_identifier='000000018' where id='${id(20)}'`)
+  const packet=JSON.stringify({details:{tikNumber:18,dochToDayDate:'2025-12-31T00:00:00Z'}})
+  const prepare=`select public.tax_api_prepare('${id(30)}','sandbox','${packet}'::jsonb,'${'a'.repeat(64)}') as id`
+  await denied(2,prepare)
+  const job=(await asUser(1,prepare)).rows[0].id
+  assert.equal((await asUser(1,prepare)).rows[0].id,job); checks++
+  assert.equal((await asUser(4,'select * from public.tax_api_submissions')).rows.length,0);checks++
+  await denied(1,`update public.tax_api_submissions set payload='{}' where id='${job}'`)
+  await denied(1,`select public.tax_api_claim('${job}','${id(1)}')`)
+  await denied(2,`select public.tax_api_approve('${job}')`)
+  await asUser(1,`select public.tax_api_approve('${job}')`)
+  await db.exec(`set role service_role; select set_config('request.jwt.claim.sub','',false);`)
+  assert.equal((await db.query(`select * from public.tax_api_claim('${job}','${id(1)}')`)).rows[0].status,'sending');checks++
+  await assert.rejects(()=>db.query(`select * from public.tax_api_claim('${job}','${id(1)}')`));checks++
+  await db.query(`select public.tax_api_complete('${job}','unknown',null,null,null)`)
+  await assert.rejects(()=>db.query(`select * from public.tax_api_claim('${job}','${id(1)}')`));checks++
+  await db.exec('reset role')
+  const next=(await asUser(1,prepare.replaceAll('a'.repeat(64),'b'.repeat(64)))).rows[0].id
+  await asUser(1,`select public.tax_api_approve('${next}')`)
+  await asUser(1,`update public.capital_cases set declaration_date='2026-12-31' where id='${id(30)}'`)
+  await db.exec(`set role service_role; select set_config('request.jwt.claim.sub','',false);`)
+  await assert.rejects(()=>db.query(`select * from public.tax_api_claim('${next}','${id(1)}')`));checks++
+  await db.exec('reset role')
+  console.log(`Database migrations executed; ${checks} authorization, storage, approval, audit, date-preservation and API submission state checks passed.`)
 } finally { await db.close() }
