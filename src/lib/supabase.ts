@@ -12,7 +12,8 @@ export const capitalSupabase: SupabaseClient | null = isCapitalSupabaseConfigure
         autoRefreshToken: true,
         detectSessionInUrl: true,
       },
-      global: { headers: { 'x-application-name': 'abady-capital' } },
+      // Keep the SDK's standard headers: Auth's browser CORS allowlist does not
+      // necessarily permit extra application headers on the OTP preflight.
     })
   : null
 

@@ -14,4 +14,9 @@ describe('safe email-code failure diagnostics',()=>{
     expect(authFailureReference({code:'private@example.com',status:123456})).toBe('unknown · HTTP unknown')
     expect(authFailureMessage(error)+authFailureReference(error)).not.toContain('secret')
   })
+  it('recognizes SDK network errors instead of displaying unknown HTTP failures',()=>{
+    const error={status:0,name:'AuthRetryableFetchError'}
+    expect(authFailureMessage(error)).toContain('הדפדפן לא קיבל תשובה')
+    expect(authFailureReference(error)).toBe('network_error · HTTP unavailable')
+  })
 })
